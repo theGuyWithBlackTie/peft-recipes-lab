@@ -12,6 +12,10 @@ name = "downloadpytorch"
 transformers = "==5.12.1"
 peft = "==0.19.1"
 torch = {version = "==2.12.1", index = "downloadpytorch"}
+notebook = "*"
+huggingface-hub = "==1.20.1"
+datasets = "==5.0.0"
+bitsandbytes = "==0.50.0"
 
 [dev-packages]
 

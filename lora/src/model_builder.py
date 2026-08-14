@@ -40,7 +40,7 @@ class LlamaModelBuilder:
     
     def _setup_tokenizer(self) -> PreTrainedTokenizer:
         """
-        Loads and applies Llama-3 specific tokenizer configurationns."""
+        Loads and applies Llama-3 specific tokenizer configurations."""
         logger.info(f"Loading tokenizer for model: {self.model_id}")
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -67,7 +67,7 @@ class LlamaModelBuilder:
         """
         Loads the base language model with the specified quantization configuration and prepares it for k-bit training.
         """
-        logger.info(f"Loading base mode {self.model_id} in 4-bit...")
+        logger.info(f"Loading base model {self.model_id} in 4-bit...")
         quant_config = self._get_quantization_config()
 
         model = AutoModelForCausalLM.from_pretrained(

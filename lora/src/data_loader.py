@@ -39,7 +39,7 @@ class LlamaDataLoader:
         """
         Loads the csv file and subsamples it to fit GPU/time constraints.
         """
-        if not os.path.exists(self.csv_path):
+        if not self.csv_path or not os.path.exists(self.csv_path):
             raise FileNotFoundError(f"Dataset not found at {self.csv_path}. Please check the path in the configuration")
 
         logger.info(f"Loading dataset from {self.csv_path}")
@@ -89,28 +89,28 @@ class LlamaDataLoader:
 
     def _format_dataset(self, dataset: Dataset) -> Dataset:
         """
-        Piplines the formatting methods across the entire dataset.
+        Pipelines the formatting methods across the entire dataset.
         """
         logger.info("Standardizing 'input'/'output' columns to conversational format..")
         # num_proc allows multi-processing to speed up mapping on large datasets
         dataset = dataset.map(
             self._csv_to_messages,
             desc='Converting to messages',
-            num_proc = os.cpu_count() - 2
+            num_proc = max(1, (os.cpu_count() or 1) - 2)
         )
 
         logger.info("Applying LLaMA-3 chat template...")
         dataset = dataset.map(
             self._apply_llama3_template,
             desc="Applying chat template",
-            num_proc= os.cpu_count() - 2
+            num_proc= max(1, (os.cpu_count() or 1) - 2)
         )
 
         # Drop the original columns to free up RAM before passing to the trainer
         dataset = dataset.select_columns([self.text_column])
         return dataset
 
-    def _split_data(self, dataset: Dataset) -> Tuple[Dataset, DatasetDict]:
+    def _split_data(self, dataset: Dataset) -> Tuple[Dataset, Dataset]:
         """
         Splits the dataset into training and validation sets.
         """
@@ -137,6 +137,3 @@ class LlamaDataLoader:
         logger.info(f"Data ready. Train size: {len(train_data)}, Val Size: {len(val_data)}")
 
         return train_data, val_data
-
-
-    
