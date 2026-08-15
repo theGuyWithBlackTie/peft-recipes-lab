@@ -121,7 +121,7 @@ class LlamaDataLoader:
         )
         return dataset_dict["train"], dataset_dict["test"]
 
-    def load_and_prepare(self) -> Tuple[Dataset, DatasetDict]:
+    def load_and_prepare(self) -> Tuple[Dataset, Dataset]:
         """
         Pipeline to load and prepare the dataset for training.
         """

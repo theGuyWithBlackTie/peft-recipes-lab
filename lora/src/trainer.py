@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class LlamaTrainer:
     """
     A class that encapsulates the setup and execution of the fine-tuning loop
-    using Hugging Face's SFTTrainer for LLama-3 QLoRA.
+    using Hugging Face's SFTTrainer for LLama-3 LoRA.
     """
 
     def __init__(self, 
@@ -33,7 +33,7 @@ class LlamaTrainer:
 
         Args:
             config (dict): The configuration dictionary (usually loaded from a YAML file)
-            model (PreTrainedModel): The PEFT-wrapped LLaMA model ready for QLoRA tuning
+            model (PreTrainedModel): The PEFT-wrapped LLaMA model ready for LoRA tuning
             tokenizer (PreTrainedTokenizer): The LLaMA tokenizer
             train_dataset (Dataset): The training dataset
             val_dataset (Dataset): The validation dataset
@@ -49,7 +49,7 @@ class LlamaTrainer:
     def _get_training_arguments(self) -> TrainingArguments:
         """
         Maps configuration variables to Hugging Face TrainingArguments.
-        Defaults are optimized for QLoRA fine-tuning on consumer GPUs.
+        Defaults are optimized for LoRA fine-tuning.
         """
         logger.info("Configuring Training Arguments...")
 
@@ -74,8 +74,7 @@ class LlamaTrainer:
             # Gradient accumulation simulates larger batch sizes by updating weights less frequently.
             gradient_accumulation_steps=self.config.get("gradient_accumulation_steps", 4),
             
-            # Paged optimizers push optimizer states to CPU RAM when GPU VRAM runs out.
-            optim="paged_adamw_8bit",
+            optim=self.config.get("optim", "adamw_torch"),
             learning_rate=float(self.config.get("learning_rate", 2e-4)),
             lr_scheduler_type="cosine",
             warmup_ratio=0.03,
@@ -92,8 +91,10 @@ class LlamaTrainer:
             # LLaMA-3 natively uses bfloat16 (bf16). If your GPU is older than Ampere (RTX 30XX), 
             # set bf16=False and fp16=True instead.
             bf16=self.config.get("use_bf16", True),
-            fp16=self.config.get("use_fp16", False)            
+            fp16=self.config.get("use_fp16", False)
         )
+
+        return training_args
 
     def _setup_trainer(self, training_args: TrainingArguments) -> SFTTrainer:
         """
@@ -124,7 +125,7 @@ class LlamaTrainer:
         logger.info("Starting training loop...")
         trainer.train()
 
-        logger.info("Training complete. Saving final model adapters to {self.output_dir}...")
+        logger.info(f"Training complete. Saving final model adapters to {self.output_dir}...")
         trainer.model.save_pretrained(self.output_dir)
         self.tokenizer.save_pretrained(self.output_dir)
 

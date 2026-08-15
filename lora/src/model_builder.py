@@ -3,13 +3,11 @@ from transformers import (
     AutoModelForCausalLM,
     PreTrainedModel,
     AutoTokenizer,
-    PreTrainedTokenizer,
-    BitsAndBytesConfig
+    PreTrainedTokenizer
 )
 from peft import (
     LoraConfig,
     get_peft_model,
-    prepare_model_for_kbit_training,
     PeftModel
 )
 
@@ -22,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class LlamaModelBuilder:
     """
-    A builder class responsible for instantiating and configuring a LLama model and its tokenizer for (Q)Lora fine-tuning.
+    A builder class responsible for instantiating and configuring a LLama model and its tokenizer for LoRA fine-tuning.
     """
     def __init__(self, config: dict):
         """
@@ -52,34 +50,23 @@ class LlamaModelBuilder:
 
         return tokenizer
     
-    def _get_quantization_config(self) -> BitsAndBytesConfig:
-        """
-        Constructs the 4-bit configuration object"""
-        logger.info("Configuring BitsAndBytes for 4-bit quantization")
-        return BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,
-        )
-
     def _load_base_model(self) -> PreTrainedModel:
         """
-        Loads the base language model with the specified quantization configuration and prepares it for k-bit training.
+        Loads the base language model in standard precision (bf16/fp16/fp32) for LoRA fine-tuning.
         """
-        logger.info(f"Loading base model {self.model_id} in 4-bit...")
-        quant_config = self._get_quantization_config()
+        torch_dtype = (
+            torch.bfloat16 if self.config.get("use_bf16", True)
+            else (torch.float16 if self.config.get("use_fp16", False) else torch.float32)
+        )
+        logger.info(f"Loading base model {self.model_id} with torch_dtype={torch_dtype}...")
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            quantization_config=quant_config,
-            device_map="auto",
+            torch_dtype=torch_dtype,
+            device_map=self.config.get("device_map", "auto"),
+            trust_remote_code=True,
             use_cache=False
         )
-
-        # Prepare the model for PEFT (enables gradient checkpointing, layer norm casting)
-        logger.info("Preparing model for k-bit training...")
-        model = prepare_model_for_kbit_training(model)
 
         return model
 
