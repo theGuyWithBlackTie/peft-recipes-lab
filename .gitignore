@@ -35,6 +35,15 @@ outputs/
 checkpoints/
 wandb/
 
+# Datasets & Large Data Files
+*.parquet
+*.csv
+*.jsonl
+dataset/more_data/
+dataset/hf_export/*/*.parquet
+dataset/hf_export/*.parquet
+lora/hf_data/
+
 # OS-generated files
 .DS_Store
 Thumbs.db
