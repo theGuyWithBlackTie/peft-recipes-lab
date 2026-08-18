@@ -26,7 +26,7 @@ target_modules:
 # or a local file path (e.g. "dataset/hf_export/small/train.parquet")
 dataset_path: "theguywithblacktie/hinglish-conversations"
 dataset_config: "small"  # Options: "small" (50k) or "large" (405k)
-system_prompt: "You are a helpful and friendly AI assistant that communicates naturally in Hinglish (code-mixed Hindi and English)."
+system_prompt: "You are a helpful, friendly, and culturally attuned AI assistant. You converse naturally in Romanized Hinglish (Hindi code-mixed with English in Latin script). Keep your tone warm, relatable, and clear, using everyday vocabulary, expressions, and context appropriate for Indian conversations while providing accurate and helpful responses."
 test_size: 0.1
 seed: 42
 max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for testing
