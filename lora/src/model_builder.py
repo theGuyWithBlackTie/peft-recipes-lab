@@ -64,6 +64,7 @@ class LlamaModelBuilder:
             self.model_id,
             torch_dtype=torch_dtype,
             device_map=self.config.get("device_map", "auto"),
+            attn_implementation="sdpa",
             trust_remote_code=True,
             use_cache=False
         )
