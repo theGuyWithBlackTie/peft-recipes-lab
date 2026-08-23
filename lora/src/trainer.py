@@ -160,6 +160,13 @@ class LlamaTrainer:
         trainer.model.save_pretrained(self.output_dir)
         self.tokenizer.save_pretrained(self.output_dir)
 
+        # Automatically generate and save training curve dashboard
+        try:
+            from utilities.plotting import plot_training_curves
+            plot_training_curves(trainer, output_dir=self.output_dir, show_plot=True)
+        except Exception as e:
+            logger.warning(f"Could not generate training plot: {e}")
+
         logger.info("Save successful. Fine-tuning complete!")
 
 
