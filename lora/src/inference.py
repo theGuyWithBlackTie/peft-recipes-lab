@@ -99,6 +99,12 @@ class LlamaInference:
         inputs = self.tokenizer(prompt_text, return_tensors="pt").to(self.model.device)
 
         logger.info("Generating response...")
+        # LLaMA-3 stop tokens: <|end_of_text|> (128001) and <|eot_id|> (128009)
+        terminators = [
+            self.tokenizer.eos_token_id,
+            self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        ]
+
         # Use torch.no_grad() to save memory since we aren't calculating gradients
         with torch.no_grad():
             outputs = self.model.generate(
@@ -107,6 +113,7 @@ class LlamaInference:
                 temperature=self.config.get("temperature", 0.7),
                 top_p=self.config.get("top_p", 0.9),
                 do_sample=True,
+                eos_token_id=terminators,
                 pad_token_id=self.tokenizer.eos_token_id
             )
 

@@ -5,8 +5,8 @@
 # --- Model Settings ---
 model_id: "meta-llama/Llama-3.2-1B-Instruct"
 device_map: "auto"
-use_bf16: true
-use_fp16: false
+use_bf16: false
+use_fp16: true
 
 # --- LoRA Parameters ---
 lora_r: 16
@@ -29,18 +29,19 @@ dataset_config: "small"  # Options: "small" (50k) or "large" (405k)
 system_prompt: "You are a helpful, friendly, and culturally attuned AI assistant. You converse naturally in Romanized Hinglish (Hindi code-mixed with English in Latin script). Keep your tone warm, relatable, and clear, using everyday vocabulary, expressions, and context appropriate for Indian conversations while providing accurate and helpful responses."
 test_size: 0.1
 seed: 42
-max_samples: 10000  # Set to null for full split, or an integer (e.g., 5000) for testing
+max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for testing
 
 # --- Training / SFTTrainer Settings ---
 output_dir: "./llama3-lora-outputs"
 push_to_hub: true
 hub_model_id: "theguywithblacktie/llama-3.2-1b-hinglish-lora"
-epochs: 1
-batch_size: 4
-gradient_accumulation_steps: 4
+epochs: 2
+batch_size: 8
+gradient_accumulation_steps: 2
+gradient_checkpointing: false
 learning_rate: 0.0002
 optim: "adamw_torch"
-max_seq_length: 2048
+max_seq_length: 512
 logging_steps: 10
 eval_steps: 500
 save_steps: 50

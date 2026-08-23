@@ -53,18 +53,18 @@ class LlamaModelBuilder:
     def _load_base_model(self) -> PreTrainedModel:
         """
         Loads the base language model in standard precision (bf16/fp16/fp32) for LoRA fine-tuning.
-        Supports both single-GPU and multi-GPU DDP under accelerate launch.
+        Dynamically detects native hardware BF16 support (excluding emulation).
         """
+        native_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported(including_emulation=False)
         torch_dtype = (
-            torch.bfloat16 if self.config.get("use_bf16", True)
-            else (torch.float16 if self.config.get("use_fp16", False) else torch.float32)
+            torch.bfloat16 if native_bf16
+            else (torch.float16 if torch.cuda.is_available() else torch.float32)
         )
         
-        # In DDP (accelerate launch), each process binds to its specific LOCAL_RANK GPU
-        if "LOCAL_RANK" in os.environ:
-            local_rank = int(os.environ["LOCAL_RANK"])
-            device_map = {"": local_rank}
-            logger.info(f"DDP Distributed mode detected: binding to GPU {local_rank}")
+        # In DDP (accelerate launch), device_map MUST be None so Trainer handles device placement
+        if "LOCAL_RANK" in os.environ or "WORLD_SIZE" in os.environ:
+            device_map = None
+            logger.info("DDP Distributed mode detected: letting Trainer manage GPU device placement (device_map=None)")
         else:
             device_map = self.config.get("device_map", "auto")
 

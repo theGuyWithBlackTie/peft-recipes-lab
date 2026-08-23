@@ -69,7 +69,7 @@ You MUST respond strictly with a valid JSON object matching this schema:
   "hinglish_naturalness": {
     "score": <integer 1 to 5>,
     "reasoning": "<Concise justification for naturalness score>"
-  },
+  }, 
   "overall_weighted_score": <float 1.0 to 5.0>,
   "summary_verdict": "<Overall summary evaluation>"
 }

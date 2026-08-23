@@ -70,11 +70,16 @@ class LlamaTrainer:
             eval_steps = 500 if do_eval else 0
 
         # Build candidate arguments dictionary
+        # Dynamically determine precision based on native hardware capability
+        native_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported(including_emulation=False)
+        use_bf16 = native_bf16 if self.config.get("use_bf16") is None else (self.config.get("use_bf16") and native_bf16)
+        use_fp16 = (not native_bf16) if self.config.get("use_fp16") is None else self.config.get("use_fp16", not native_bf16)
+
         candidate_args = {
             "output_dir": self.output_dir,
-            "per_device_train_batch_size": self.config.get("batch_size", 4),
-            "per_device_eval_batch_size": self.config.get("batch_size", 4),
-            "gradient_accumulation_steps": self.config.get("gradient_accumulation_steps", 4),
+            "per_device_train_batch_size": self.config.get("batch_size", 8),
+            "per_device_eval_batch_size": self.config.get("batch_size", 8),
+            "gradient_accumulation_steps": self.config.get("gradient_accumulation_steps", 2),
             "optim": self.config.get("optim", "adamw_torch"),
             "learning_rate": float(self.config.get("learning_rate", 2e-4)),
             "lr_scheduler_type": "cosine",
@@ -84,12 +89,13 @@ class LlamaTrainer:
             "logging_steps": self.config.get("logging_steps", 10),
             "save_strategy": "steps",
             "save_steps": self.config.get("save_steps", 50),
-            "bf16": self.config.get("use_bf16", True),
-            "fp16": self.config.get("use_fp16", False),
+            "gradient_checkpointing": self.config.get("gradient_checkpointing", False),
+            "bf16": use_bf16,
+            "fp16": use_fp16,
             "report_to": "none",
             # SFTConfig specific parameters (trl >= 0.12.0)
             "dataset_text_field": "text",
-            "max_seq_length": self.config.get("max_seq_length", 2048),
+            "max_seq_length": self.config.get("max_seq_length", 1024),
             "packing": False,
         }
 

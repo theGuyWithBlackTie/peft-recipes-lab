@@ -18,12 +18,38 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def authenticate_hf():
+    """Ensures child processes in DDP are authenticated with Hugging Face."""
+    hf_token = os.environ.get("HF_TOKEN")
+    if not hf_token:
+        try:
+            from kaggle_secrets import UserSecretsClient
+            user_secrets = UserSecretsClient()
+            hf_token = user_secrets.get_secret("HF_TOKEN")
+        except Exception:
+            pass
+    if not hf_token:
+        try:
+            from google.colab import userdata
+            hf_token = userdata.get("HF_TOKEN")
+        except Exception:
+            pass
+    if hf_token:
+        from huggingface_hub import login
+        os.environ["HF_TOKEN"] = hf_token
+        login(token=hf_token)
+        logger.info("✅ Authenticated with Hugging Face Hub.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune LLaMA on Hinglish using LoRA")
     parser.add_argument("--config", type=str, default=os.path.join(current_dir, "config.yaml"), help="Path to config YAML file")
     args = parser.parse_args()
 
-    # 1. Load Configuration
+    # 1. Authenticate with Hugging Face
+    authenticate_hf()
+
+    # 2. Load Configuration
     logger.info(f"Loading configuration from {args.config}...")
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
