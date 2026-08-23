@@ -109,9 +109,10 @@ class LlamaInference:
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=self.config.get("max_new_tokens", 512),
-                temperature=self.config.get("temperature", 0.7),
-                top_p=self.config.get("top_p", 0.9),
+                max_new_tokens=int(self.config.get("max_new_tokens", 256)),
+                temperature=float(self.config.get("temperature", 0.6)),
+                top_p=float(self.config.get("top_p", 0.9)),
+                repetition_penalty=float(self.config.get("repetition_penalty", 1.15)),
                 do_sample=True,
                 eos_token_id=terminators,
                 pad_token_id=self.tokenizer.eos_token_id
