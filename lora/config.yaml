@@ -35,9 +35,9 @@ max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for 
 output_dir: "./llama3-lora-outputs"
 push_to_hub: true
 hub_model_id: "theguywithblacktie/llama-3.2-1b-hinglish-lora"
-epochs: 2
-batch_size: 8
-gradient_accumulation_steps: 2
+epochs: 1
+batch_size: 4
+gradient_accumulation_steps: 4
 gradient_checkpointing: false
 learning_rate: 0.0002
 optim: "adamw_torch"
