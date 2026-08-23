@@ -3,21 +3,27 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
-[[source]]
-url = "https://download.pytorch.org/whl/cu126"
-verify_ssl = true
-name = "downloadpytorch"
-
 [packages]
-transformers = "==5.12.1"
-peft = "==0.19.1"
-torch = {version = "==2.12.1", index = "downloadpytorch"}
-notebook = "*"
-huggingface-hub = "==1.20.1"
-datasets = "==5.0.0"
-bitsandbytes = "==0.50.0"
+torch = ">=2.1.0"
+transformers = ">=4.40.0"
+peft = ">=0.10.0"
+trl = ">=0.8.0,<0.15.0"
+accelerate = ">=0.28.0"
+datasets = ">=2.18.0"
+bitsandbytes = ">=0.43.0"
+huggingface-hub = ">=0.20.0"
+pyyaml = ">=6.0"
+matplotlib = ">=3.7.0"
+pandas = ">=2.0.0"
+scipy = ">=1.11.0"
+tqdm = ">=4.66.0"
 
 [dev-packages]
+notebook = "*"
+ipywidgets = "*"
+openai = ">=1.12.0"
+google-generativeai = ">=0.4.0"
+anthropic = ">=0.18.0"
 
 [requires]
 python_version = "3.12"
