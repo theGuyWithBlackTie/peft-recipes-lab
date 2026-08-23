@@ -157,10 +157,32 @@ class LlamaTrainer:
         trainer.train()
 
         logger.info(f"Training complete. Saving final model adapters to {self.output_dir}...")
+        os.makedirs(self.output_dir, exist_ok=True)
         trainer.model.save_pretrained(self.output_dir)
         self.tokenizer.save_pretrained(self.output_dir)
 
-        # Automatically generate and save training curve dashboard
+        # 1. Verify Disk Integrity
+        adapter_weights = os.path.join(self.output_dir, "adapter_model.safetensors")
+        adapter_config = os.path.join(self.output_dir, "adapter_config.json")
+
+        if os.path.exists(adapter_config) and (os.path.exists(adapter_weights) or os.path.exists(os.path.join(self.output_dir, "adapter_model.bin"))):
+            size_mb = os.path.getsize(adapter_weights) / (1024 * 1024) if os.path.exists(adapter_weights) else 0
+            logger.info(f"✅ 100% VERIFIED: Adapter weights ({size_mb:.2f} MB) and config saved to disk at {os.path.abspath(self.output_dir)}")
+        else:
+            logger.warning(f"⚠️ Warning: Expected adapter files not found in {self.output_dir}")
+
+        # 2. Optional: Push permanently to Hugging Face Hub
+        hub_model_id = self.config.get("hub_model_id")
+        if self.config.get("push_to_hub", False) and hub_model_id:
+            try:
+                logger.info(f"☁️ Backing up trained adapters to Hugging Face Hub: {hub_model_id}...")
+                trainer.model.push_to_hub(hub_model_id)
+                self.tokenizer.push_to_hub(hub_model_id)
+                logger.info(f"🎉 Successfully pushed adapter to Hugging Face Hub: https://huggingface.co/{hub_model_id}")
+            except Exception as e:
+                logger.warning(f"Could not push to Hugging Face Hub (local model is safe on disk): {e}")
+
+        # 3. Automatically generate and save training curve dashboard
         try:
             from utilities.plotting import plot_training_curves
             plot_training_curves(trainer, output_dir=self.output_dir, show_plot=True)

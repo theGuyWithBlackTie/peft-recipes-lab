@@ -33,6 +33,8 @@ max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for 
 
 # --- Training / SFTTrainer Settings ---
 output_dir: "./llama3-lora-outputs"
+push_to_hub: false
+hub_model_id: "theguywithblacktie/llama-3.2-1b-hinglish-lora"
 epochs: 1
 batch_size: 4
 gradient_accumulation_steps: 4
