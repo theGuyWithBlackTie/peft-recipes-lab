@@ -141,6 +141,23 @@ class LlamaTrainer:
         elif "tokenizer" in sft_init_params:
             trainer_kwargs["tokenizer"] = self.tokenizer
 
+        # Setup DataCollatorForCompletionOnlyLM for completion-only loss masking
+        if self.config.get("use_completion_masking", True):
+            response_template = self.config.get(
+                "response_template", 
+                "<|start_header_id|>assistant<|end_header_id|>\n\n"
+            )
+            try:
+                from trl import DataCollatorForCompletionOnlyLM
+                data_collator = DataCollatorForCompletionOnlyLM(
+                    response_template=response_template,
+                    tokenizer=self.tokenizer
+                )
+                trainer_kwargs["data_collator"] = data_collator
+                logger.info(f"✅ Enabled DataCollatorForCompletionOnlyLM with response_template='{response_template}'")
+            except Exception as e:
+                logger.warning(f"Could not initialize DataCollatorForCompletionOnlyLM: {e}")
+
         # Legacy TRL parameter support (passed directly to SFTTrainer in older versions)
         if "dataset_text_field" in sft_init_params:
             trainer_kwargs["dataset_text_field"] = "text"
