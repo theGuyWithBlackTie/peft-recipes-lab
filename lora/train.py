@@ -10,9 +10,9 @@ project_root = os.path.dirname(current_dir) if os.path.basename(current_dir) == 
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from lora.src.model_builder import LlamaModelBuilder
-from lora.src.data_loader import LlamaDataLoader
-from lora.src.trainer import LlamaTrainer
+from lora.src.model_builder import ModelBuilder
+from lora.src.data_loader import DataLoader
+from lora.src.trainer import Trainer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def authenticate_hf():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune LLaMA on Hinglish using LoRA")
+    parser = argparse.ArgumentParser(description="Fine-tune LLM on Hinglish using LoRA / QLoRA")
     parser.add_argument("--config", type=str, default=os.path.join(current_dir, "config.yaml"), help="Path to config YAML file")
     args = parser.parse_args()
 
@@ -54,20 +54,20 @@ def main():
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    # 2. Build LoRA Model and Tokenizer
+    # 3. Build LoRA Model and Tokenizer
     logger.info("Building LoRA Model...")
-    model_builder = LlamaModelBuilder(config)
+    model_builder = ModelBuilder(config)
     model, tokenizer = model_builder.build()
     model.enable_input_require_grads()
 
-    # 3. Load and Format Dataset
+    # 4. Load and Format Dataset
     logger.info("Loading and formatting dataset...")
-    data_loader = LlamaDataLoader(config, tokenizer)
+    data_loader = DataLoader(config, tokenizer)
     train_data, val_data = data_loader.load_and_prepare()
 
-    # 4. Train and Save
+    # 5. Train and Save
     logger.info("Starting training loop...")
-    trainer = LlamaTrainer(
+    trainer = Trainer(
         config=config,
         model=model,
         tokenizer=tokenizer,
@@ -80,3 +80,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

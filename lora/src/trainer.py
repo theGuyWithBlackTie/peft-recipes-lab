@@ -16,10 +16,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class LlamaTrainer:
+class Trainer:
     """
     A class that encapsulates the setup and execution of the fine-tuning loop
-    using Hugging Face's SFTTrainer for LLama-3 LoRA.
+    using Hugging Face's SFTTrainer for LoRA / QLoRA.
     """
 
     def __init__(self, 
@@ -34,8 +34,8 @@ class LlamaTrainer:
 
         Args:
             config (dict): The configuration dictionary (usually loaded from a YAML file)
-            model (PreTrainedModel): The PEFT-wrapped LLaMA model ready for LoRA tuning
-            tokenizer (PreTrainedTokenizer): The LLaMA tokenizer
+            model (PreTrainedModel): The PEFT-wrapped model ready for LoRA tuning
+            tokenizer (PreTrainedTokenizer): The tokenizer
             train_dataset (Dataset): The training dataset
             val_dataset (Dataset): The validation dataset
         """
@@ -45,7 +45,7 @@ class LlamaTrainer:
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
 
-        self.output_dir = self.config.get("output_dir", "./llama3-lora-outputs")
+        self.output_dir = self.config.get("output_dir", "./mistral-lora-outputs")
 
     def _get_training_arguments(self) -> Any:
         """
@@ -71,32 +71,32 @@ class LlamaTrainer:
             eval_steps = 500 if do_eval else 0
 
         # Build candidate arguments dictionary
-        # Dynamically determine precision based on native hardware capability
+        # Dynamically determine precision based on native hardware capability (FP16 on Kaggle P100)
         native_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported(including_emulation=False)
-        use_bf16 = native_bf16 if self.config.get("use_bf16") is None else (self.config.get("use_bf16") and native_bf16)
-        use_fp16 = (not native_bf16) if self.config.get("use_fp16") is None else self.config.get("use_fp16", not native_bf16)
+        use_bf16 = (self.config.get("use_bf16", False) and native_bf16)
+        use_fp16 = self.config.get("use_fp16", not native_bf16)
 
         candidate_args = {
             "output_dir": self.output_dir,
-            "per_device_train_batch_size": self.config.get("batch_size", 8),
-            "per_device_eval_batch_size": self.config.get("batch_size", 8),
-            "gradient_accumulation_steps": self.config.get("gradient_accumulation_steps", 2),
-            "optim": self.config.get("optim", "adamw_torch"),
+            "per_device_train_batch_size": self.config.get("batch_size", 4),
+            "per_device_eval_batch_size": self.config.get("batch_size", 4),
+            "gradient_accumulation_steps": self.config.get("gradient_accumulation_steps", 4),
+            "optim": self.config.get("optim", "paged_adamw_8bit"),
             "learning_rate": float(self.config.get("learning_rate", 2e-4)),
             "lr_scheduler_type": "cosine",
             "warmup_ratio": 0.03,
             "max_grad_norm": 0.3,
-            "num_train_epochs": self.config.get("epochs", 1),
+            "num_train_epochs": self.config.get("epochs", 2),
             "logging_steps": self.config.get("logging_steps", 10),
             "save_strategy": "steps",
-            "save_steps": self.config.get("save_steps", 50),
-            "gradient_checkpointing": self.config.get("gradient_checkpointing", False),
+            "save_steps": self.config.get("save_steps", 500),
+            "gradient_checkpointing": self.config.get("gradient_checkpointing", True),
             "bf16": use_bf16,
             "fp16": use_fp16,
             "report_to": "none",
             # SFTConfig specific parameters (trl >= 0.12.0)
             "dataset_text_field": "text",
-            "max_seq_length": self.config.get("max_seq_length", 1024),
+            "max_seq_length": self.config.get("max_seq_length", 512),
             "packing": False,
         }
 
@@ -145,7 +145,7 @@ class LlamaTrainer:
         if self.config.get("use_completion_masking", True):
             response_template = self.config.get(
                 "response_template", 
-                "<|start_header_id|>assistant<|end_header_id|>\n\n"
+                "[/INST]"
             )
             try:
                 from trl import DataCollatorForCompletionOnlyLM
@@ -162,7 +162,7 @@ class LlamaTrainer:
         if "dataset_text_field" in sft_init_params:
             trainer_kwargs["dataset_text_field"] = "text"
         if "max_seq_length" in sft_init_params:
-            trainer_kwargs["max_seq_length"] = self.config.get("max_seq_length", 2048)
+            trainer_kwargs["max_seq_length"] = self.config.get("max_seq_length", 512)
         if "packing" in sft_init_params:
             trainer_kwargs["packing"] = False
         if "peft_config" in sft_init_params:
@@ -224,11 +224,13 @@ def run_training(
     train_data: Dataset, 
     val_data: Optional[Dataset] = None
 ) -> None:
-    """Convenience wrapper for the LlamaTrainer class."""
-    trainer = LlamaTrainer(config, model, tokenizer, train_data, val_data)
+    """Convenience wrapper for the Trainer class."""
+    trainer = Trainer(config, model, tokenizer, train_data, val_data)
     trainer.train_and_save()
 
 if __name__ == "__main__":
     # Test logic
     pass
+
+
         

@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
 
 import torch
@@ -6,7 +6,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     PreTrainedModel,
-    PreTrainedTokenizer
+    PreTrainedTokenizer,
+    BitsAndBytesConfig
 )
 from peft import PeftModel
 
@@ -14,10 +15,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class LlamaInference:
+class InferenceEngine:
     """
-    A class for running inference using a base LLaMa-3 model combined with
-    fine-tuned LoRA adapters
+    A class for running inference using a base model combined with
+    fine-tuned LoRA adapters.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -27,14 +28,14 @@ class LlamaInference:
             config (dict): Project configuration dictionary
         """
         self.config = config
-        self.model_id = self.config.get("model_id", "meta-llama/Meta-Llama-3-8B-Instruct")
-        self.adapter_path = self.config.get("output_dir",  "./llama3-lora-outputs")
+        self.model_id = self.config.get("model_id", "mistralai/Mistral-7B-Instruct-v0.3")
+        self.adapter_path = self.config.get("output_dir", "./mistral-lora-outputs")
 
         self.tokenizer = None
         self.model = None
 
     def _load_model_and_tokenizer(self) -> None:
-        """Loads the base model in standard precision and merges the LoRA adapters"""
+        """Loads the base model and merges/attaches the LoRA adapters."""
         logger.info(f"Loading tokenizer from {self.adapter_path} (fallback to {self.model_id})...")
 
         # Try loading tokenizer from the adapter path first (saved during training)
@@ -50,20 +51,40 @@ class LlamaInference:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
+        native_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported(including_emulation=False)
+        requested_bf16 = self.config.get("use_bf16", False) and native_bf16
+        requested_fp16 = self.config.get("use_fp16", True)
+
         torch_dtype = (
-            torch.bfloat16 if self.config.get("use_bf16", True)
-            else (torch.float16 if self.config.get("use_fp16", False) else torch.float32)
+            torch.bfloat16 if requested_bf16
+            else (torch.float16 if (requested_fp16 and torch.cuda.is_available()) else torch.float32)
         )
-        logger.info(f"Loading base model {self.model_id} with torch_dtype={torch_dtype}...")
+
+        use_4bit = self.config.get("use_4bit", True)
+        quantization_config = None
+        if use_4bit:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch_dtype,
+                bnb_4bit_use_double_quant=True,
+            )
+
+        logger.info(f"Loading base model {self.model_id} with torch_dtype={torch_dtype}, use_4bit={use_4bit}...")
+        model_kwargs = {
+            "torch_dtype": torch_dtype,
+            "device_map": self.config.get("device_map", "auto"),
+            "trust_remote_code": True
+        }
+        if quantization_config:
+            model_kwargs["quantization_config"] = quantization_config
+
         base_model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch_dtype,
-            device_map=self.config.get("device_map", "auto"),
-            trust_remote_code=True
+            **model_kwargs
         )
 
         logger.info(f"Loading and applying LoRA adapters from {self.adapter_path}...")
-        # PeftModel wraps the base model and dynamically applies the adapter weights
         self.model = PeftModel.from_pretrained(base_model, self.adapter_path)
 
         # Set the model to evaluation mode for inference
@@ -72,7 +93,7 @@ class LlamaInference:
 
     def generate(self, user_prompt: str = None, messages: List[Dict[str, str]] = None, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate a response using the LLaMa-3 chat template.
+        Generate a response using the model's chat template.
         Pass either `user_prompt` for a single turn, or `messages` for a full conversation history.
         """
         if self.model is None or self.tokenizer is None:
@@ -87,8 +108,6 @@ class LlamaInference:
                 {"role": "user", "content": user_prompt}
             ]
 
-        # Apply the chat template. add_generation_prompt=True adds the <|start_header_id|>assistant tag at the end
-        # so the model knows it is its turn to speak
         prompt_text = self.tokenizer.apply_chat_template(
             messages,
             tokenize=False,
@@ -99,11 +118,14 @@ class LlamaInference:
         inputs = self.tokenizer(prompt_text, return_tensors="pt").to(self.model.device)
 
         logger.info("Generating response...")
-        # LLaMA-3 stop tokens: <|end_of_text|> (128001) and <|eot_id|> (128009)
-        terminators = [
+        # Collect valid terminators dynamically across architectures
+        candidate_terminators = [
             self.tokenizer.eos_token_id,
-            self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+            self.tokenizer.convert_tokens_to_ids("</s>"),
+            self.tokenizer.convert_tokens_to_ids("<|eot_id|>"),
+            self.tokenizer.convert_tokens_to_ids("<|end_of_text|>")
         ]
+        terminators = [t for t in candidate_terminators if t is not None and isinstance(t, int)]
 
         # Use torch.no_grad() to save memory since we aren't calculating gradients
         with torch.no_grad():
@@ -147,17 +169,17 @@ class LlamaInference:
 # Convenience wrapper for testing
 def run_chat(config: dict) -> None:
     """Convenience wrapper to initialize and run the chat loop."""
-    inference_engine = LlamaInference(config)
+    inference_engine = InferenceEngine(config)
     inference_engine.chat_loop()
 
 if __name__ == "__main__":
-    # Example usage for manual testing
     sample_config = {
-        "model_id": "meta-llama/Meta-Llama-3-8B-Instruct",
-        "output_dir": "./llama3-lora-outputs",
+        "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+        "output_dir": "./mistral-lora-outputs",
         "max_new_tokens": 256,
         "temperature": 0.6
     }
     run_chat(sample_config)
+
 
         

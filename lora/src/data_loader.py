@@ -9,10 +9,10 @@ from typing import Tuple, Dict, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class LlamaDataLoader:
+class DataLoader:
     """
     A class responsible for loading, formatting, and splitting datasets
-    especially for LLama-3 instruction tuning.
+    for instruction and conversational fine-tuning.
     """
     def __init__(self, config: Dict[str, Any], tokenizer: PreTrainedTokenizer):
         """
@@ -20,7 +20,7 @@ class LlamaDataLoader:
         
         Args:
             config (dict): The configuration dictionary (usually loaded from a YAML file)
-            tokenizer (PreTrainedTokenizer): The loaded LLaMA-3 tokenizer to apply chat templates.
+            tokenizer (PreTrainedTokenizer): The loaded model tokenizer to apply chat templates.
         """
         self.config = config
         self.tokenizer = tokenizer
@@ -31,7 +31,7 @@ class LlamaDataLoader:
         self.seed = self.config.get("seed", 42)
 
         # Limit the number of samples for fine-tuning due to GPU constraints
-        self.max_samples = self.config.get("max_samples", 1000)
+        self.max_samples = self.config.get("max_samples", None)
 
         self.text_column = "text"
 
@@ -91,9 +91,9 @@ class LlamaDataLoader:
         messages = [{"role": "system", "content": system_msg}] + input_msgs + output_msgs
         return {"messages": messages}
 
-    def _apply_llama3_template(self, example: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_chat_template(self, example: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Applies the LLaMA-3 chat template to the messages, 
+        Applies the tokenizer's chat template to the messages, 
         tokenizes the input, and formats the output for supervised fine-tuning.
         """
         formatted_text = self.tokenizer.apply_chat_template(
@@ -114,9 +114,9 @@ class LlamaDataLoader:
             num_proc=max(1, (os.cpu_count() or 1) - 2)
         )
 
-        logger.info("Applying LLaMA-3 chat template...")
+        logger.info("Applying model chat template...")
         dataset = dataset.map(
-            self._apply_llama3_template,
+            self._apply_chat_template,
             desc="Applying chat template",
             num_proc=max(1, (os.cpu_count() or 1) - 2)
         )
@@ -166,3 +166,4 @@ class LlamaDataLoader:
 
         logger.info(f"Data ready. Train size: {len(train_data)}, Val Size: {len(val_data)}")
         return train_data, val_data
+

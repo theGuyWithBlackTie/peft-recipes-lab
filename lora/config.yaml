@@ -1,12 +1,14 @@
 # ==========================================
-# LLaMA-3 LoRA Fine-Tuning Configuration
+# Mistral-7B LoRA / QLoRA Fine-Tuning Configuration
+# Optimized for Kaggle P100 GPU (16GB VRAM, Pascal)
 # ==========================================
 
 # --- Model Settings ---
-model_id: "meta-llama/Llama-3.2-1B-Instruct"
+model_id: "mistralai/Mistral-7B-Instruct-v0.3"
 device_map: "auto"
+use_4bit: true             # 4-bit QLoRA to fit comfortably in ~5.5GB VRAM
+use_fp16: true             # P100 supports FP16 natively (does NOT support BF16)
 use_bf16: false
-use_fp16: true
 
 # --- LoRA Parameters ---
 lora_r: 16
@@ -22,8 +24,6 @@ target_modules:
   - "down_proj"
 
 # --- Dataset Settings ---
-# Can be Hugging Face Hub repo id (e.g. "theguywithblacktie/hinglish-conversations")
-# or a local file path (e.g. "dataset/hf_export/small/train.parquet")
 dataset_path: "theguywithblacktie/hinglish-conversations"
 dataset_config: "small"  # Options: "small" (50k) or "large" (405k)
 system_prompt: "You are a helpful, friendly, and culturally attuned AI assistant. You converse naturally in Romanized Hinglish (Hindi code-mixed with English in Latin script). Keep your tone warm, relatable, and clear, using everyday vocabulary, expressions, and context appropriate for Indian conversations while providing accurate and helpful responses."
@@ -32,21 +32,21 @@ seed: 42
 max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for testing
 
 # --- Training / SFTTrainer Settings ---
-output_dir: "./llama3-lora-outputs"
+output_dir: "./mistral-lora-outputs"
 push_to_hub: true
-hub_model_id: "theguywithblacktie/llama-3.2-1b-hinglish-lora"
+hub_model_id: "theguywithblacktie/mistral-7b-instruct-hinglish-lora"
 epochs: 2
 batch_size: 4
 gradient_accumulation_steps: 4
-gradient_checkpointing: false
+gradient_checkpointing: true
 learning_rate: 0.0002
-optim: "adamw_torch"
+optim: "paged_adamw_8bit"
 max_seq_length: 512
 logging_steps: 10
 eval_steps: 500
 save_steps: 500
 use_completion_masking: true
-response_template: "<|start_header_id|>assistant<|end_header_id|>\n\n"
+response_template: "[/INST]"
 
 # --- Inference Settings ---
 max_new_tokens: 256

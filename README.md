@@ -60,12 +60,12 @@ peft-recipes-lab/
 ├── lora/                                # Recipe 1: LoRA Fine-Tuning Implementation
 │   ├── config.yaml                      # Hyperparameters, precision, and training configuration
 │   ├── train.py                         # Multi-GPU CLI runner with DDP & accelerate support
-│   ├── finetune-llama_3.2-1b.ipynb      # Interactive end-to-end training & evaluation notebook
+│   ├── finetune-mistral-7b.ipynb        # Interactive end-to-end training & evaluation notebook
 │   └── src/
-│       ├── data_loader.py               # LLaMA-3 ChatML formatter & deterministic subsampler
-│       ├── model_builder.py             # Precision selector, target module injector & LoRA config
+│       ├── data_loader.py               # Chat template formatter & deterministic subsampler
+│       ├── model_builder.py             # QLoRA 4-bit / precision selector & adapter injector
 │       ├── trainer.py                   # SFTTrainer wrapper, integrity verifier & curve logger
-│       └── inference.py                 # Chat inference engine with <|eot_id|> stop-token control
+│       └── inference.py                 # Chat inference engine with architecture-safe stop tokens
 │
 ├── evaluation/                          # Unified 3-Pillar Evaluation Suite (Shared across all recipes)
 │   ├── perplexity.py                    # Cross-Entropy Loss & Perplexity (PPL = exp(loss))
@@ -111,7 +111,7 @@ import os, sys
 sys.path.insert(0, '/kaggle/working/peft-recipes-lab')
 os.chdir('/kaggle/working/peft-recipes-lab')
 
-# 2. Open and run lora/finetune-llama_3.2-1b.ipynb
+# 2. Open and run lora/finetune-mistral-7b.ipynb
 ```
 
 ---
@@ -135,18 +135,19 @@ accelerate launch lora/train.py --config lora/config.yaml
 Run inference using the fine-tuned adapter:
 
 ```python
-from lora.src.inference import LlamaInference
+from lora.src.inference import InferenceEngine
 
 config = {
-    "model_id": "meta-llama/Llama-3.2-1B-Instruct",
-    "output_dir": "./llama3-lora-outputs",
+    "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+    "output_dir": "./mistral-lora-outputs",
+    "use_4bit": True,
     "max_new_tokens": 256,
     "temperature": 0.7,
     "top_p": 0.9,
     "system_prompt": "You are a helpful assistant that converses naturally in Romanized Hinglish."
 }
 
-engine = LlamaInference(config)
+engine = InferenceEngine(config)
 
 response = engine.generate(
     user_prompt="bhai kal exam hai aur abhi tak kuch nahi padha, kya karun?"
