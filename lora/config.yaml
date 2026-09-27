@@ -50,7 +50,7 @@ use_completion_masking: true
 response_template: "[/INST]"
 
 # --- Inference Settings ---
-max_new_tokens: 384
+max_new_tokens: 512
 temperature: 0.4
 top_p: 0.9
 repetition_penalty: 1.05
