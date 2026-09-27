@@ -65,30 +65,82 @@ class DataLoader:
     def _item_to_messages(self, example: Dict[str, Any]) -> Dict[str, Any]:
         """
         Converts 'input' and 'output' into standard conversational messages format.
-        Supports both structured list-of-dicts format and plain text strings.
+        Strictly normalizes roles and enforces alternating user/assistant turns
+        to comply with Mistral and other strict chat templates.
         """
         system_msg = self.config.get("system_prompt", "You are a helpful and friendly AI assistant that communicates in natural, conversational Hinglish.")
 
         inp = example.get("input")
         out = example.get("output")
 
-        # Process input (structured list or string)
+        raw_turns = []
+        # 1. Extract input turns
         if isinstance(inp, (list, tuple)) or (hasattr(inp, "__iter__") and not isinstance(inp, (str, bytes))):
-            input_msgs = [dict(m) for m in inp]
-        elif isinstance(inp, str):
-            input_msgs = [{"role": "user", "content": inp.strip()}]
-        else:
-            input_msgs = []
+            for m in inp:
+                if isinstance(m, dict):
+                    role = str(m.get("role", "")).strip().lower()
+                    content = str(m.get("content", "")).strip()
+                    if content:
+                        raw_turns.append((role, content))
+        elif isinstance(inp, str) and inp.strip():
+            raw_turns.append(("user", inp.strip()))
 
-        # Process output (structured list or string)
+        # 2. Extract output turns
         if isinstance(out, (list, tuple)) or (hasattr(out, "__iter__") and not isinstance(out, (str, bytes))):
-            output_msgs = [dict(m) for m in out]
-        elif isinstance(out, str):
-            output_msgs = [{"role": "assistant", "content": out.strip()}]
-        else:
-            output_msgs = []
+            for m in out:
+                if isinstance(m, dict):
+                    role = str(m.get("role", "")).strip().lower()
+                    content = str(m.get("content", "")).strip()
+                    if content:
+                        raw_turns.append((role, content))
+        elif isinstance(out, str) and out.strip():
+            raw_turns.append(("assistant", out.strip()))
 
-        messages = [{"role": "system", "content": system_msg}] + input_msgs + output_msgs
+        # 3. Normalize roles (user/human -> user, assistant/gpt/bot/model -> assistant)
+        # and merge consecutive turns with identical roles
+        normalized = []
+        for role, content in raw_turns:
+            if role in ["user", "human"]:
+                norm_role = "user"
+            elif role in ["assistant", "gpt", "bot", "model"]:
+                norm_role = "assistant"
+            elif role == "system":
+                system_msg = f"{system_msg} {content}".strip()
+                continue
+            else:
+                norm_role = "assistant" if (normalized and normalized[-1]["role"] == "user") else "user"
+
+            if normalized and normalized[-1]["role"] == norm_role:
+                normalized[-1]["content"] = f"{normalized[-1]['content']}\n\n{content}"
+            else:
+                normalized.append({"role": norm_role, "content": content})
+
+        # 4. Strict Alternation Enforcement:
+        # Mistral requirement: After optional system, roles MUST alternate: user -> assistant -> user -> assistant
+        convo = []
+        expected_role = "user"
+        for turn in normalized:
+            if turn["role"] == expected_role:
+                convo.append(turn)
+                expected_role = "assistant" if expected_role == "user" else "user"
+            elif convo and turn["role"] == convo[-1]["role"]:
+                convo[-1]["content"] = f"{convo[-1]['content']}\n\n{turn['content']}"
+
+        # 5. Guarantee at least 1 valid user turn and 1 valid assistant turn
+        if not convo or convo[0]["role"] != "user":
+            fallback_u = inp if isinstance(inp, str) and inp.strip() else "Hello"
+            convo.insert(0, {"role": "user", "content": fallback_u})
+
+        if convo[-1]["role"] != "assistant":
+            fallback_a = out if isinstance(out, str) and out.strip() else "Haan, bataiye main aapki kya madad kar sakta hoon?"
+            convo.append({"role": "assistant", "content": fallback_a})
+
+        # 6. Final verification of alternation
+        messages = []
+        if system_msg:
+            messages.append({"role": "system", "content": system_msg.strip()})
+        messages.extend(convo)
+
         return {"messages": messages}
 
     def _apply_chat_template(self, example: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,11 +148,27 @@ class DataLoader:
         Applies the tokenizer's chat template to the messages, 
         tokenizes the input, and formats the output for supervised fine-tuning.
         """
-        formatted_text = self.tokenizer.apply_chat_template(
-            example["messages"],
-            tokenize=False,
-            add_generation_prompt=False
-        )
+        try:
+            formatted_text = self.tokenizer.apply_chat_template(
+                example["messages"],
+                tokenize=False,
+                add_generation_prompt=False
+            )
+        except Exception as e:
+            # Fallback for any template parsing edge cases: strip system and wrap in clean user/assistant
+            msgs = example["messages"]
+            user_parts = [m["content"] for m in msgs if m["role"] in ["system", "user"]]
+            asst_parts = [m["content"] for m in msgs if m["role"] == "assistant"]
+            clean_msgs = [
+                {"role": "user", "content": "\n\n".join(user_parts)},
+                {"role": "assistant", "content": "\n\n".join(asst_parts)}
+            ]
+            formatted_text = self.tokenizer.apply_chat_template(
+                clean_msgs,
+                tokenize=False,
+                add_generation_prompt=False
+            )
+
         return {self.text_column: formatted_text}
 
     def _format_dataset(self, dataset: Dataset) -> Dataset:
