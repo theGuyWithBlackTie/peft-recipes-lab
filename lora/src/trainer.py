@@ -90,6 +90,7 @@ class Trainer:
             "logging_steps": self.config.get("logging_steps", 10),
             "save_strategy": "steps",
             "save_steps": self.config.get("save_steps", 500),
+            "save_total_limit": self.config.get("save_total_limit", 2),
             "gradient_checkpointing": self.config.get("gradient_checkpointing", True),
             "bf16": use_bf16,
             "fp16": use_fp16,
