@@ -232,6 +232,12 @@ class DataLoader:
             formatted_dataset = self._format_dataset(raw_data)
             train_data, val_data = self._split_data(formatted_dataset)
 
+        max_eval = self.config.get("max_eval_samples", 200)
+        if max_eval and val_data is not None and len(val_data) > max_eval:
+            logger.info(f"Subsampling validation dataset from {len(val_data)} to {max_eval} for fast evaluation...")
+            val_data = val_data.shuffle(seed=self.seed).select(range(max_eval))
+
         logger.info(f"Data ready. Train size: {len(train_data)}, Val Size: {len(val_data)}")
         return train_data, val_data
+
 

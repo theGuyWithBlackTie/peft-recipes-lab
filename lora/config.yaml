@@ -30,9 +30,11 @@ system_prompt: "You are a helpful, friendly, and culturally attuned AI assistant
 test_size: 0.1
 seed: 42
 max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for testing
+max_eval_samples: 200  # Subsample eval set so eval takes 15s instead of 35m
 
 # --- Training / SFTTrainer Settings ---
 output_dir: "./mistral-lora-outputs"
+resume_from_checkpoint: null  # Set to null (scratch), true (auto-detect latest), or specific checkpoint path
 push_to_hub: true
 hub_model_id: "theguywithblacktie/mistral-7b-instruct-hinglish-lora"
 epochs: 2

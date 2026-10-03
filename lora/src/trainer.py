@@ -178,8 +178,9 @@ class Trainer:
         training_args = self._get_training_arguments()
         trainer = self._setup_trainer(training_args)
 
-        logger.info("Starting training loop...")
-        trainer.train()
+        resume_checkpoint = self.config.get("resume_from_checkpoint", None)
+        logger.info(f"Starting training loop (resume_from_checkpoint={resume_checkpoint})...")
+        trainer.train(resume_from_checkpoint=resume_checkpoint)
 
         logger.info(f"Training complete. Saving final model adapters to {self.output_dir}...")
         os.makedirs(self.output_dir, exist_ok=True)
