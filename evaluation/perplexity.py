@@ -57,10 +57,10 @@ class PerplexityEvaluator:
 
         # Extract text list
         if isinstance(dataset, Dataset):
-            num_eval = min(len(dataset), max_samples)
+            num_eval = min(len(dataset), max_samples) if max_samples is not None else len(dataset)
             texts = [dataset[i][text_column] for i in range(num_eval)]
         else:
-            num_eval = min(len(dataset), max_samples)
+            num_eval = min(len(dataset), max_samples) if max_samples is not None else len(dataset)
             texts = dataset[:num_eval]
 
         logger.info(f"Evaluating Perplexity on {len(texts)} samples (max_seq_length={max_seq_length})...")
@@ -115,27 +115,38 @@ class PerplexityEvaluator:
 
     def compare_models(
         self,
-        base_model: PreTrainedModel,
         lora_model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer,
         dataset: Union[Dataset, List[str]],
-        max_samples: int = 100,
-        max_seq_length: int = 512
+        base_model: Optional[PreTrainedModel] = None,
+        max_samples: Optional[int] = 100,
+        max_seq_length: int = 512,
+        batch_size: int = 4
     ) -> Dict[str, Any]:
         """
         Calculates and compares Perplexity between Base Model (Before) and LoRA Model (After).
+        If base_model is None, automatically toggles lora_model.disable_adapter().
 
         Returns:
             Dict[str, Any]: Comparative statistics including perplexity reduction percentage.
         """
-        logger.info("Computing Baseline Perplexity on Base Model (Before)...")
-        base_res = self.compute_perplexity(
-            base_model, tokenizer, dataset, max_samples=max_samples, max_seq_length=max_seq_length
-        )
+        if base_model is None and hasattr(lora_model, "disable_adapter"):
+            logger.info("Computing Baseline Perplexity on Base Model (via disabled adapter)...")
+            with lora_model.disable_adapter():
+                base_res = self.compute_perplexity(
+                    lora_model, tokenizer, dataset, max_samples=max_samples, max_seq_length=max_seq_length, batch_size=batch_size
+                )
+        elif base_model is not None:
+            logger.info("Computing Baseline Perplexity on Base Model (Before)...")
+            base_res = self.compute_perplexity(
+                base_model, tokenizer, dataset, max_samples=max_samples, max_seq_length=max_seq_length, batch_size=batch_size
+            )
+        else:
+            base_res = {"loss": 0.0, "perplexity": 0.0}
 
         logger.info("Computing Perplexity on LoRA Fine-Tuned Model (After)...")
         lora_res = self.compute_perplexity(
-            lora_model, tokenizer, dataset, max_samples=max_samples, max_seq_length=max_seq_length
+            lora_model, tokenizer, dataset, max_samples=max_samples, max_seq_length=max_seq_length, batch_size=batch_size
         )
 
         base_ppl = base_res["perplexity"]

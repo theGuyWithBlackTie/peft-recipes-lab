@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 import logging
 from typing import Dict, Any, List, Optional, Union, Callable
 
@@ -23,83 +24,84 @@ class LLMJudge:
 
     def __init__(
         self,
-        model_name: str = "gpt-4o-mini",
+        model_name: str = "gemini-1.5-flash",
         custom_caller: Optional[Callable[[str, str], str]] = None,
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
+        max_retries: int = 3
     ):
         """
         Initializes the LLM Judge.
 
         Args:
-            model_name (str): Judge model identifier (e.g. 'gpt-4o-mini', 'gemini-1.5-flash', 'claude-3-5-sonnet-20241022').
+            model_name (str): Judge model identifier (e.g. 'gemini-1.5-flash', 'gpt-4o-mini', 'claude-3-5-sonnet-20241022').
             custom_caller (Callable, optional): Custom function taking (system_prompt, user_prompt) -> response_str.
             api_key (str, optional): API key for the selected provider.
+            max_retries (int): Number of retries on API failure/rate-limit.
         """
         self.model_name = model_name
         self.custom_caller = custom_caller
         self.api_key = api_key
+        self.max_retries = max_retries
 
     def _call_judge_llm(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Routes system prompt and user input to the configured LLM backend.
+        Routes system prompt and user input to the configured LLM backend with retry logic.
         """
         if self.custom_caller is not None:
             return self.custom_caller(system_prompt, user_prompt)
 
-        # 1. OpenAI / Compatible endpoint
-        if "gpt" in self.model_name.lower() or "o1" in self.model_name.lower():
+        for attempt in range(self.max_retries):
             try:
-                from openai import OpenAI
-                client = OpenAI(api_key=self.api_key or os.environ.get("OPENAI_API_KEY"))
-                response = client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.0,
-                    response_format={"type": "json_object"}
-                )
-                return response.choices[0].message.content
-            except Exception as e:
-                logger.error(f"OpenAI Judge Call Error: {e}")
-                raise
+                # 1. OpenAI / Compatible endpoint
+                if "gpt" in self.model_name.lower() or "o1" in self.model_name.lower():
+                    from openai import OpenAI
+                    client = OpenAI(api_key=self.api_key or os.environ.get("OPENAI_API_KEY"))
+                    response = client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=0.0,
+                        response_format={"type": "json_object"}
+                    )
+                    return response.choices[0].message.content
 
-        # 2. Google Gemini
-        elif "gemini" in self.model_name.lower():
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=self.api_key or os.environ.get("GEMINI_API_KEY"))
-                model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    system_instruction=system_prompt,
-                    generation_config={"response_mime_type": "application/json", "temperature": 0.0}
-                )
-                response = model.generate_content(user_prompt)
-                return response.text
-            except Exception as e:
-                logger.error(f"Gemini Judge Call Error: {e}")
-                raise
+                # 2. Google Gemini
+                elif "gemini" in self.model_name.lower():
+                    import google.generativeai as genai
+                    genai.configure(api_key=self.api_key or os.environ.get("GEMINI_API_KEY"))
+                    model = genai.GenerativeModel(
+                        model_name=self.model_name,
+                        system_instruction=system_prompt,
+                        generation_config={"response_mime_type": "application/json", "temperature": 0.0}
+                    )
+                    response = model.generate_content(user_prompt)
+                    return response.text
 
-        # 3. Anthropic Claude
-        elif "claude" in self.model_name.lower():
-            try:
-                import anthropic
-                client = anthropic.Anthropic(api_key=self.api_key or os.environ.get("ANTHROPIC_API_KEY"))
-                response = client.messages.create(
-                    model=self.model_name,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": user_prompt}],
-                    temperature=0.0,
-                    max_tokens=1024
-                )
-                return response.content[0].text
-            except Exception as e:
-                logger.error(f"Anthropic Judge Call Error: {e}")
-                raise
+                # 3. Anthropic Claude
+                elif "claude" in self.model_name.lower():
+                    import anthropic
+                    client = anthropic.Anthropic(api_key=self.api_key or os.environ.get("ANTHROPIC_API_KEY"))
+                    response = client.messages.create(
+                        model=self.model_name,
+                        system=system_prompt,
+                        messages=[{"role": "user", "content": user_prompt}],
+                        temperature=0.0,
+                        max_tokens=1024
+                    )
+                    return response.content[0].text
 
-        else:
-            raise ValueError(f"Unsupported judge model: {self.model_name}. Please provide a `custom_caller`.")
+                else:
+                    raise ValueError(f"Unsupported judge model: {self.model_name}. Please provide a `custom_caller`.")
+
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    logger.error(f"Judge API Call permanently failed after {self.max_retries} attempts: {e}")
+                    raise
+                wait_time = (attempt + 1) * 2
+                logger.warning(f"Judge API Call attempt {attempt + 1} failed ({e}). Retrying in {wait_time}s...")
+                time.sleep(wait_time)
 
     def _extract_json(self, raw_output: str) -> Dict[str, Any]:
         """
