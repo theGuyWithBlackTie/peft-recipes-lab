@@ -24,23 +24,29 @@ class LLMJudge:
 
     def __init__(
         self,
-        model_name: str = "gemini-1.5-flash",
+        model_name: str = "gemini-3.1-pro-preview",
         custom_caller: Optional[Callable[[str, str], str]] = None,
         api_key: Optional[str] = None,
-        max_retries: int = 3
+        project_id: Optional[str] = None,
+        location: str = "global",
+        max_retries: int = 5
     ):
         """
         Initializes the LLM Judge.
 
         Args:
-            model_name (str): Judge model identifier (e.g. 'gemini-1.5-flash', 'gpt-4o-mini', 'claude-3-5-sonnet-20241022').
+            model_name (str): Judge model identifier (e.g. 'gemini-2.5-flash', 'gpt-4o-mini', 'claude-3-5-sonnet-20241022').
             custom_caller (Callable, optional): Custom function taking (system_prompt, user_prompt) -> response_str.
             api_key (str, optional): API key for the selected provider.
+            project_id (str, optional): GCP project ID for Vertex AI (supports ADC).
+            location (str): GCP region for Vertex AI (defaults to 'us-central1').
             max_retries (int): Number of retries on API failure/rate-limit.
         """
         self.model_name = model_name
         self.custom_caller = custom_caller
         self.api_key = api_key
+        self.project_id = project_id
+        self.location = location
         self.max_retries = max_retries
 
     def _call_judge_llm(self, system_prompt: str, user_prompt: str) -> str:
@@ -67,17 +73,57 @@ class LLMJudge:
                     )
                     return response.choices[0].message.content
 
-                # 2. Google Gemini
+                # 2. Google Gemini / Vertex AI
                 elif "gemini" in self.model_name.lower():
-                    import google.generativeai as genai
-                    genai.configure(api_key=self.api_key or os.environ.get("GEMINI_API_KEY"))
-                    model = genai.GenerativeModel(
-                        model_name=self.model_name,
-                        system_instruction=system_prompt,
-                        generation_config={"response_mime_type": "application/json", "temperature": 0.0}
-                    )
-                    response = model.generate_content(user_prompt)
-                    return response.text
+                    try:
+                        from google import genai
+                        from google.genai import types
+
+                        project = self.project_id or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+                        if not project:
+                            try:
+                                import subprocess, shutil
+                                gcloud_bin = shutil.which("gcloud") or os.path.expanduser("~/google-cloud-sdk/bin/gcloud")
+                                if os.path.exists(gcloud_bin):
+                                    p = subprocess.run([gcloud_bin, "config", "get-value", "project"], capture_output=True, text=True, timeout=2)
+                                    if p.returncode == 0 and p.stdout.strip():
+                                        project = p.stdout.strip()
+                            except Exception:
+                                pass
+
+                        use_vertex = bool(project or self.project_id or os.environ.get("GOOGLE_GENAI_USE_VERTEXAI") == "true" or not (self.api_key or os.environ.get("GEMINI_API_KEY")))
+
+                        if use_vertex:
+                            client = genai.Client(
+                                vertexai=True,
+                                project=project,
+                                location=self.location
+                            )
+                        else:
+                            client = genai.Client(api_key=self.api_key or os.environ.get("GEMINI_API_KEY"))
+
+                        config = types.GenerateContentConfig(
+                            system_instruction=system_prompt,
+                            response_mime_type="application/json",
+                            temperature=0.0
+                        )
+                        response = client.models.generate_content(
+                            model=self.model_name,
+                            contents=user_prompt,
+                            config=config
+                        )
+                        return response.text
+
+                    except ImportError:
+                        import google.generativeai as genai
+                        genai.configure(api_key=self.api_key or os.environ.get("GEMINI_API_KEY"))
+                        model = genai.GenerativeModel(
+                            model_name=self.model_name,
+                            system_instruction=system_prompt,
+                            generation_config={"response_mime_type": "application/json", "temperature": 0.0}
+                        )
+                        response = model.generate_content(user_prompt)
+                        return response.text
 
                 # 3. Anthropic Claude
                 elif "claude" in self.model_name.lower():
@@ -99,8 +145,17 @@ class LLMJudge:
                 if attempt == self.max_retries - 1:
                     logger.error(f"Judge API Call permanently failed after {self.max_retries} attempts: {e}")
                     raise
-                wait_time = (attempt + 1) * 2
-                logger.warning(f"Judge API Call attempt {attempt + 1} failed ({e}). Retrying in {wait_time}s...")
+                err_str = str(e)
+                wait_time = (attempt + 1) * 3
+                if "429" in err_str or "quota" in err_str.lower() or "resourceexhausted" in err_str.lower():
+                    match = re.search(r"retry in ([0-9.]+)s", err_str)
+                    if not match:
+                        match = re.search(r"seconds:\s*([0-9]+)", err_str)
+                    if match:
+                        wait_time = float(match.group(1)) + 2.0
+                    else:
+                        wait_time = max(wait_time, 10.0 * (attempt + 1))
+                logger.warning(f"Judge API Call attempt {attempt + 1} failed ({e}). Retrying in {wait_time:.1f}s...")
                 time.sleep(wait_time)
 
     def _extract_json(self, raw_output: str) -> Dict[str, Any]:
@@ -156,64 +211,91 @@ class LLMJudge:
 
     def evaluate_benchmark(
         self,
-        test_samples: List[Dict[str, str]]
+        test_samples: List[Dict[str, str]],
+        max_workers: int = 8
     ) -> Dict[str, Any]:
         """
         Evaluates a benchmark dataset containing prompts, Model A (Base) responses,
-        and Model B (LoRA) responses.
+        and Model B (LoRA) responses using parallel worker threads.
 
         Args:
             test_samples (List[Dict[str, str]]): List of dicts with keys:
                 - 'prompt': user input
                 - 'response_base': base model output
                 - 'response_lora': fine-tuned model output
+            max_workers (int): Number of concurrent worker threads.
 
         Returns:
             Dict[str, Any]: Comprehensive evaluation report including Win Rates, Mean Scores, and Breakdown.
         """
-        logger.info(f"Running LLM Judge Evaluation across {len(test_samples)} benchmark samples...")
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        total = len(test_samples)
+        logger.info(f"Running LLM Judge Evaluation across {total} samples with {max_workers} threads...")
+        print(f"[LLM Judge] Running evaluation across {total} samples with {max_workers} parallel workers...", flush=True)
 
         model_a_scores = {"coherence": [], "helpfulness": [], "hinglish_naturalness": [], "overall": []}
         model_b_scores = {"coherence": [], "helpfulness": [], "hinglish_naturalness": [], "overall": []}
-        
         wins = {"Model A": 0, "Model B": 0, "Tie": 0}
-        detailed_results = []
 
-        for i, sample in enumerate(test_samples, 1):
+        def process_sample(item):
+            idx, sample = item
             prompt = sample["prompt"]
             resp_base = sample.get("response_base", "")
             resp_lora = sample.get("response_lora", "")
 
-            # 1. Single response evaluations
             eval_base = self.evaluate_single_response(prompt, resp_base)
             eval_lora = self.evaluate_single_response(prompt, resp_lora)
-
-            # Record scores for Base
-            if "coherence" in eval_base and isinstance(eval_base["coherence"], dict) and "score" in eval_base["coherence"]:
-                model_a_scores["coherence"].append(eval_base["coherence"]["score"])
-                model_a_scores["helpfulness"].append(eval_base["helpfulness"]["score"])
-                model_a_scores["hinglish_naturalness"].append(eval_base["hinglish_naturalness"]["score"])
-                model_a_scores["overall"].append(eval_base.get("overall_weighted_score", 0))
-
-            # Record scores for LoRA
-            if "coherence" in eval_lora and isinstance(eval_lora["coherence"], dict) and "score" in eval_lora["coherence"]:
-                model_b_scores["coherence"].append(eval_lora["coherence"]["score"])
-                model_b_scores["helpfulness"].append(eval_lora["helpfulness"]["score"])
-                model_b_scores["hinglish_naturalness"].append(eval_lora["hinglish_naturalness"]["score"])
-                model_b_scores["overall"].append(eval_lora.get("overall_weighted_score", 0))
-
-            # 2. Pairwise Blind comparison
             pairwise_res = self.evaluate_pairwise(prompt, resp_base, resp_lora)
-            winner = pairwise_res.get("winner", "Tie")
-            wins[winner] = wins.get(winner, 0) + 1
 
-            detailed_results.append({
-                "sample_id": i,
-                "prompt": prompt,
-                "base_model": {"response": resp_base, "evaluation": eval_base},
-                "lora_model": {"response": resp_lora, "evaluation": eval_lora},
-                "pairwise": pairwise_res
-            })
+            return idx, prompt, resp_base, resp_lora, eval_base, eval_lora, pairwise_res
+
+        completed = 0
+        results_by_idx = {}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_sample, (i, s)): i for i, s in enumerate(test_samples, 1)}
+            for future in as_completed(futures):
+                try:
+                    idx, prompt, resp_base, resp_lora, eval_base, eval_lora, pairwise_res = future.result()
+                    results_by_idx[idx] = (prompt, resp_base, resp_lora, eval_base, eval_lora, pairwise_res)
+                    completed += 1
+                    if completed % 5 == 0 or completed == 1 or completed == total:
+                        print(f"[LLM Judge Progress] Completed {completed}/{total} samples...", flush=True)
+                except Exception as e:
+                    logger.error(f"Sample failed during parallel eval: {e}")
+                    completed += 1
+
+        # Aggregate sorted results
+        detailed_results = []
+        for i in range(1, total + 1):
+            if i in results_by_idx:
+                prompt, resp_base, resp_lora, eval_base, eval_lora, pairwise_res = results_by_idx[i]
+
+                # Record scores for Base
+                if "coherence" in eval_base and isinstance(eval_base["coherence"], dict) and "score" in eval_base["coherence"]:
+                    model_a_scores["coherence"].append(eval_base["coherence"]["score"])
+                    model_a_scores["helpfulness"].append(eval_base["helpfulness"]["score"])
+                    model_a_scores["hinglish_naturalness"].append(eval_base["hinglish_naturalness"]["score"])
+                    model_a_scores["overall"].append(eval_base.get("overall_weighted_score", 0))
+
+                # Record scores for LoRA
+                if "coherence" in eval_lora and isinstance(eval_lora["coherence"], dict) and "score" in eval_lora["coherence"]:
+                    model_b_scores["coherence"].append(eval_lora["coherence"]["score"])
+                    model_b_scores["helpfulness"].append(eval_lora["helpfulness"]["score"])
+                    model_b_scores["hinglish_naturalness"].append(eval_lora["hinglish_naturalness"]["score"])
+                    model_b_scores["overall"].append(eval_lora.get("overall_weighted_score", 0))
+
+                winner = pairwise_res.get("winner", "Tie")
+                wins[winner] = wins.get(winner, 0) + 1
+
+                detailed_results.append({
+                    "sample_id": i,
+                    "prompt": prompt,
+                    "base_model": {"response": resp_base, "evaluation": eval_base},
+                    "lora_model": {"response": resp_lora, "evaluation": eval_lora},
+                    "pairwise": pairwise_res
+                })
 
         total = len(test_samples)
         
