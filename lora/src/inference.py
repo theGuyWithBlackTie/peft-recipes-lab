@@ -131,7 +131,7 @@ class InferenceEngine:
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=int(self.config.get("max_new_tokens", 256)),
+                max_new_tokens=int(self.config.get("max_new_tokens", 2048)),
                 temperature=float(self.config.get("temperature", 0.6)),
                 top_p=float(self.config.get("top_p", 0.9)),
                 repetition_penalty=float(self.config.get("repetition_penalty", 1.15)),
@@ -145,6 +145,10 @@ class InferenceEngine:
         generated_tokens = outputs[0][input_length:]
         
         response = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        # Clean up output if generation didn't stop properly
+        for term_str in ["</s>", "<|eot_id|>", "<|end_of_text|>"]:
+            if term_str in response:
+                response = response.split(term_str)[0]
         return response.strip()
 
     def chat_loop(self) -> None:
@@ -176,7 +180,7 @@ if __name__ == "__main__":
     sample_config = {
         "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
         "output_dir": "./mistral-lora-outputs",
-        "max_new_tokens": 256,
+        "max_new_tokens": 2048,
         "temperature": 0.6
     }
     run_chat(sample_config)

@@ -24,32 +24,40 @@ target_modules:
   - "down_proj"
 
 # --- Dataset Settings ---
-dataset_path: "theguywithblacktie/hinglish-conversations"
-dataset_config: "small"  # Options: "small" (50k) or "large" (405k)
-system_prompt: "You are a helpful, friendly, and culturally attuned AI assistant. You converse naturally in Romanized Hinglish (Hindi code-mixed with English in Latin script). Keep your tone warm, relatable, and clear, using everyday vocabulary, expressions, and context appropriate for Indian conversations while providing accurate and helpful responses."
+dataset_path: "theguywithblacktie/medical-cot"
+local_dataset_path_fallback: "dataset/hf_export/medical_cot"
+experiment_mode: "cot" # Options: "cot", "direct", "weighted_cot"
 test_size: 0.1
 seed: 42
-max_samples: null  # Set to null for full split, or an integer (e.g., 5000) for testing
-max_eval_samples: 200  # Subsample eval set so eval takes 15s instead of 35m
+max_samples: null
+max_eval_samples: 200
 
 # --- Training / SFTTrainer Settings ---
 output_dir: "./mistral-lora-outputs"
-resume_from_checkpoint: null  # Set to null (scratch), true (auto-detect latest), or specific checkpoint path
+resume_from_checkpoint: null
 push_to_hub: true
-hub_model_id: "theguywithblacktie/mistral-7b-instruct-hinglish-lora"
+hub_model_id: "theguywithblacktie/mistral-7b-instruct-medical-cot-lora"
 epochs: 2
 batch_size: 2
 gradient_accumulation_steps: 8
 gradient_checkpointing: true
 learning_rate: 0.0002
 optim: "paged_adamw_8bit"
-max_seq_length: 1024
+max_seq_length: 2048
 logging_steps: 10
 eval_steps: 500
 save_steps: 500
 save_total_limit: 2
 use_completion_masking: true
 response_template: "[/INST]"
+
+# --- Loss Weighting Settings ---
+loss_weighting:
+  enabled: false
+  think_tag_weight: 0.25
+  reasoning_weight: 0.50
+  end_think_tag_weight: 0.75
+  answer_weight: 1.00
 
 # --- Inference Settings ---
 max_new_tokens: 512

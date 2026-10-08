@@ -92,12 +92,12 @@ class Trainer:
             "save_steps": self.config.get("save_steps", 500),
             "save_total_limit": self.config.get("save_total_limit", 2),
             "gradient_checkpointing": self.config.get("gradient_checkpointing", True),
-            "bf16": use_bf16,
-            "fp16": use_fp16,
+            "bf16": self.config.get("use_bf16", False),
+            "fp16": self.config.get("use_fp16", True),
             "report_to": "none",
             # SFTConfig specific parameters (trl >= 0.12.0)
             "dataset_text_field": "text",
-            "max_seq_length": self.config.get("max_seq_length", 512),
+            "max_seq_length": self.config.get("max_seq_length", 2048),
             "packing": False,
         }
 
@@ -169,7 +169,22 @@ class Trainer:
         if "peft_config" in sft_init_params:
             trainer_kwargs["peft_config"] = None
 
-        return SFTTrainer(**trainer_kwargs)
+        experiment_mode = self.config.get("experiment_mode", "direct")
+
+        if experiment_mode == "weighted_cot":
+            logger.info("Initializing ProgressiveWeightedLossTrainer (Tier 3)...")
+            from lora.src.weighted_loss_trainer import ProgressiveWeightedLossTrainer, ProgressiveWeightedLossCollator
+            weights = {
+                "think_tag_weight": 0.25,
+                "reasoning_weight": 0.50,
+                "end_think_tag_weight": 0.75,
+                "answer_weight": 1.00,
+                "prompt": 0.00
+            }
+            collator = ProgressiveWeightedLossCollator(tokenizer=self.tokenizer, weights=weights)
+            return ProgressiveWeightedLossTrainer(weight_collator=collator, **trainer_kwargs)
+        else:
+            return SFTTrainer(**trainer_kwargs)
 
     def train_and_save(self) -> None:
         """

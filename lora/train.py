@@ -42,8 +42,9 @@ def authenticate_hf():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune LLM on Hinglish using LoRA / QLoRA")
+    parser = argparse.ArgumentParser(description="Fine-tune LLM for Medical CoT using LoRA / QLoRA")
     parser.add_argument("--config", type=str, default=os.path.join(current_dir, "config.yaml"), help="Path to config YAML file")
+    parser.add_argument("--mode", type=str, choices=["direct", "cot", "weighted_cot"], default=None, help="Experiment mode (overrides config.yaml)")
     args = parser.parse_args()
 
     # 1. Authenticate with Hugging Face
@@ -53,6 +54,9 @@ def main():
     logger.info(f"Loading configuration from {args.config}...")
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
+        
+    if args.mode:
+        config["experiment_mode"] = args.mode
 
     # 3. Build LoRA Model and Tokenizer
     logger.info("Building LoRA Model...")
