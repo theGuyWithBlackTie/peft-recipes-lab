@@ -120,7 +120,16 @@ class InferenceEngine:
         self.model.eval()
         logger.info("Model and tokenizer successfully loaded for inference.")
 
-    def generate(self, user_prompt: str = None, messages: List[Dict[str, str]] = None, system_prompt: str = "You are a helpful assistant.") -> str:
+    def generate(
+        self,
+        user_prompt: str = None,
+        messages: List[Dict[str, str]] = None,
+        system_prompt: str = "You are a helpful assistant.",
+        max_new_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        repetition_penalty: Optional[float] = None
+    ) -> str:
         """
         Generate a response using the model's chat template.
         Pass either `user_prompt` for a single turn, or `messages` for a full conversation history.
@@ -164,14 +173,19 @@ class InferenceEngine:
         ]
         terminators = [t for t in candidate_terminators if t is not None and isinstance(t, int)]
 
+        gen_max_new_tokens = int(max_new_tokens if max_new_tokens is not None else self.config.get("max_new_tokens", 1024))
+        gen_temperature = float(temperature if temperature is not None else self.config.get("temperature", 0.4))
+        gen_top_p = float(top_p if top_p is not None else self.config.get("top_p", 0.9))
+        gen_rep_penalty = float(repetition_penalty if repetition_penalty is not None else self.config.get("repetition_penalty", 1.05))
+
         # Use torch.no_grad() to save memory since we aren't calculating gradients
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=int(self.config.get("max_new_tokens", 2048)),
-                temperature=float(self.config.get("temperature", 0.6)),
-                top_p=float(self.config.get("top_p", 0.9)),
-                repetition_penalty=float(self.config.get("repetition_penalty", 1.15)),
+                max_new_tokens=gen_max_new_tokens,
+                temperature=gen_temperature,
+                top_p=gen_top_p,
+                repetition_penalty=gen_rep_penalty,
                 do_sample=True,
                 eos_token_id=terminators,
                 pad_token_id=self.tokenizer.eos_token_id
