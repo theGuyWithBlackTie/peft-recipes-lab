@@ -1,17 +1,19 @@
-# 🧪 PEFT Recipes Lab
+# 🧪 PEFT Recipes Lab: Medical Chain-of-Thought (CoT)
 
 <div align="center">
 
+[![Branch: cot](https://img.shields.io/badge/Branch-cot-blue.svg?logo=git&logoColor=white)](https://github.com/theGuyWithBlackTie/peft-recipes-lab/tree/cot)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch 2.x](https://img.shields.io/badge/PyTorch-2.x-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![Hugging Face PEFT](https://img.shields.io/badge/%F0%9F%A4%97%20PEFT-0.10%2B-yellow)](https://github.com/huggingface/peft)
+[![Hugging Face PEFT](https://img.shields.io/badge/%F0%9F%A4%97%20PEFT-0.13%2B-yellow)](https://github.com/huggingface/peft)
 [![TRL SFTTrainer](https://img.shields.io/badge/TRL-SFTTrainer-orange)](https://github.com/huggingface/trl)
+[![Dataset: medical-cot](https://img.shields.io/badge/%F0%9F%A4%97%20Dataset-medical--cot-green)](https://huggingface.co/datasets/theguywithblacktie/medical-cot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Hardware: NVIDIA P100 / T4 / A100](https://img.shields.io/badge/Hardware-NVIDIA%20P100%20%7C%20T4%20%7C%20A100-76B900.svg?logo=nvidia&logoColor=white)](https://www.nvidia.com/)
+[![Hardware: Kaggle P100 / T4 x 2](https://img.shields.io/badge/Hardware-Kaggle%20P100%20%7C%20T4%20x%202-76B900.svg?logo=nvidia&logoColor=white)](https://www.nvidia.com/)
 
-**Production-grade, modular, and reproducible Parameter-Efficient Fine-Tuning (PEFT) recipes for modern Large Language Models.**
+**Production-grade, modular, and reproducible PEFT fine-tuning recipes for DeepSeek-R1-style Long-Form Chain-of-Thought (CoT) reasoning and clinical diagnosis.**
 
-[Overview](#-overview--mission) • [Recipes](#-completed-recipes) • [Repository Structure](#-repository-structure) • [Quickstart](#-quickstart) • [Evaluation Suite](#-comprehensive-evaluation-suite) • [Speed Optimization](#-speed-optimization--hardware-tuning) • [Roadmap](#-peft-recipes-roadmap)
+[Overview](#-overview--mission) • [Branch Evolution](#-differences-between-main-and-cot-branches) • [Experimental Ladder](#-the-4-tier-experimental-ladder) • [Evaluation Suite](#-dual-pillar-clinical-evaluation-suite) • [Quickstart](#-quickstart) • [Kaggle Execution](#-interactive-kaggle-execution)
 
 </div>
 
@@ -19,42 +21,78 @@
 
 ## 🎯 Overview & Mission
 
-**`PEFT Recipes Lab`** is an open-source engineering lab dedicated to practical, high-throughput Parameter-Efficient Fine-Tuning recipes for modern open-weights LLMs.
+The **`cot`** branch transforms the repository's PEFT pipeline from conversational instruction-following into a state-of-the-art **Chain-of-Thought (CoT) reasoning framework**, tailored for complex clinical diagnosis and biomedical deduction.
 
-Fine-tuning LLMs on custom domains, dialects, and tasks often suffers from slow training iterations, excessive GPU memory consumption, and unstructured ad-hoc evaluation. This repository provides:
-
-1. **Modular Architecture:** Clean separation of data loading, model building, multi-precision training, and inference across different PEFT techniques.
-2. **Speed & Memory Optimization Engine:** Eliminates hardware bottlenecks on commodity GPUs (e.g. NVIDIA P100, T4, RTX 4090) through Scaled Dot-Product Attention (`sdpa`), 4-bit NF4 quantization, and left-padded batched generation with KV-caching.
-3. **Rigorous Multi-Pillar Evaluation Suite:** Quantitative Perplexity ($PPL = e^{\text{Loss}}$), character-level script purity, and multi-dimensional LLM-as-a-Judge with blind head-to-head win-rate benchmarking.
-4. **Automated Artifacts & Dashboards:** Zero-overhead generation of publication-ready training loss/perplexity curves and structured JSON metrics.
+Standard fine-tuning often trains models to leap directly to conclusions, leading to diagnostic hallucinations and missed contraindications. Here, we fine-tune **Mistral-7B-Instruct-v0.3** using **4-bit QLoRA** with an explicit **DeepSeek-R1-style internal monologue** (`<think> ... </think>`) to formulate hypotheses, analyze evidence, resolve contradictions, and self-correct before giving a final diagnosis.
 
 ---
 
-## 🌟 Completed Recipes
+## 🔄 Differences Between `main` and `cot` Branches
 
-### 1. Recipe 1: LoRA (Low-Rank Adaptation) — `Llama-3.2-1B-Instruct`
-Standard full-precision / FP16 low-rank weight decomposition adapting Meta's `Llama-3.2-1B-Instruct` on Romanized Hinglish dialogues from [`theguywithblacktie/hinglish-conversations`](https://huggingface.co/datasets/theguywithblacktie/hinglish-conversations).
-
-### 2. Recipe 2: 4-bit QLoRA (Quantized LoRA) — `Mistral-7B-Instruct-v0.3`
-High-efficiency 4-bit NormalFloat (NF4) quantization with double quantization on Mistral-7B. Fine-tuned on 64,000+ conversational samples on a single 16GB GPU (NVIDIA P100 / T4) while fitting comfortably under 6GB VRAM.
-
-#### 💬 Before vs. After Fine-Tuning Comparison (Mistral-7B)
-
-| User Query | Base Mistral-7B (Before) | QLoRA Fine-Tuned (After) |
-|---|---|---|
-| *"arre yaar, aaj office mein itna zyada kaam tha ki dimag ka dahi ho gaya. thoda relax karne ka koi mast idea batao."* | Formal English advice or literal, awkward textbook Hindi translations. | *"haan yaar, tension mat lo! ek garam cup chai ya coffee piyo, thodi der phone side rakh do, aur apna favorite comedy show ya music chala lo. dimag ekdum fresh ho jayega!"* |
-| *"weekend pe doston ke saath kuch accha cook karna hai. koi easy aur spicy street food style recipe suggest karo na!"* | Generic Western recipe suggestions without cultural context. | *"try karo street-style Pav Bhaji ya quick Crispy Corn Chaat! bohot jaldi banta hai, spicy aur chatpata hota hai, doston ko super pasand aayega!"* |
-| *"bhai ek confusion hai, kya mujhe apna personal laptop upgrade karna chahiye ya cloud setup use karna chahiye data science ke liye?"* | Generic computer hardware breakdown in pure English. | *"agar basic learning aur tabular data hai toh laptop theek hai, par LLMs ya heavy deep learning ke liye local GPU pe kharcha karne se accha Colab ya Kaggle cloud setup use karo—paisa aur time dono bachega!"* |
+| Dimension | `main` Branch (Hinglish Chat) | `cot` Branch (Medical CoT Reasoning) |
+| :--- | :--- | :--- |
+| **Domain & Task** | Romanized Hindi-English conversational assistant | Complex clinical diagnostics & pathophysiology deduction |
+| **Reasoning Paradigm** | Direct response generation | **DeepSeek-R1-style** `<think> ... </think>` scratchpad reflection |
+| **Dataset** | `theguywithblacktie/hinglish-conversations` | [`theguywithblacktie/medical-cot`](https://huggingface.co/datasets/theguywithblacktie/medical-cot) (1,800 train / 200 test) |
+| **Loss Masking** | Uniform SFT on assistant turns | Completion masking on `[/INST]` + **Progressive Per-Token Loss Weighting** |
+| **Evaluation Pillar A** | Latin vs. Devanagari Script Purity | **Structural & Cognitive Metrics**: format compliance, thought length, reflection marker density |
+| **Evaluation Pillar B** | Hinglish naturalness & tone judge | **4-Axis Clinical Judge**: intermediate hypotheses, evidence utilization, contradiction handling, self-reflection |
+| **Kaggle Notebook** | `lora/finetune-mistral-7b.ipynb` | [`lora/finetune-mistral-7b-cot.ipynb`](lora/finetune-mistral-7b-cot.ipynb) with git-pull sync & multi-GPU support |
 
 ---
 
-## ✨ Key Features
+## 🪜 The 4-Tier Experimental Ladder
 
-* **⚡ Dynamic Hardware Precision Detection:** Automatically detects whether the host GPU has native hardware support for `bfloat16` (`torch.cuda.is_bf16_supported(including_emulation=False)`). Prevents 10x slow software emulation on Turing/Pascal GPUs by routing to native FP16 Tensor Cores, while taking full advantage of BF16 on Ampere/Hopper (A100/H100/L4).
-* **🧠 Architecture-Safe Chat Formatting:** Enforces strict role alternation (`user -> assistant -> user`) required by Mistral and LLaMA Jinja chat templates, automatically normalizing roles and merging consecutive messages.
-* **🚀 15x Fast Batched Inference:** Left-padded parallel batch generation (`batch_size=8`) with KV-caching (`use_cache=True`) and explicit EOS terminators, cutting inference time from 50s down to ~3s per pair.
-* **📊 4-Panel Training Visualizer:** Automatically logs and plots Step Loss, Step-level Perplexity, Gradient Norm stability, and Learning Rate schedules to `training_curves.png` and `training_metrics.json`.
-* **💾 Guaranteed Integrity & Hub Sync:** Verifies local `.safetensors` weight serializations before pushing cleanly to Hugging Face Model Hub.
+To rigorously measure what reasoning tokens and differential supervision contribute to clinical performance, the pipeline implements a 4-tier experimental ladder:
+
+```
+Tier 0: Zero-Shot Base       ──> Evaluates un-finetuned Mistral-7B out-of-the-box
+        │
+Tier 1: Direct SFT Baseline  ──> Direct diagnosis (no <think> scratchpad)
+        │
+Tier 2: Standard CoT SFT     ──> Full <think>...</think> reflection with uniform loss
+        │
+Tier 3: Progressive Weighted ──> Differential token supervision:
+        Loss SFT                 <think>: 0.25 | reasoning: 0.50 | </think>: 0.75 | answer: 1.00
+```
+
+### ⚖️ Tier 3 Progressive Token-Weighting Schedule
+
+During Tier 3, `ProgressiveWeightedLossTrainer` and `ProgressiveWeightedLossCollator` apply differential loss pressure:
+
+$$\mathcal{L}_{\text{weighted}} = \frac{\sum_{t=1}^{T} w_t \cdot \ell_{\text{CE}}(y_t, \hat{y}_t)}{\sum_{t=1}^{T} w_t}$$
+
+| Token Category | Weight ($w_t$) | Rationale & Mechanism |
+| :--- | :---: | :--- |
+| **Prompt / Instruction** | `0.00` | Masked with label `-100`; no loss on user questions. |
+| **`<think>` trigger tag** | `0.25` | Low pressure to enter the scratchpad naturally. |
+| **`reasoning_tokens` (internal thought)** | `0.50` | Moderate supervision; encourages differential exploration and backtracking without penalizing intermediate dead ends. |
+| **`</think>` closing tag** | `0.75` | Higher pressure to cleanly conclude thinking and transition to user response. |
+| **`answer_tokens` (clinical diagnosis)** | `1.00` | Full supervision pressure on diagnostic accuracy, safety, and intervention planning. |
+
+---
+
+## 📊 Dual-Pillar Clinical Evaluation Suite
+
+The evaluation suite ([`evaluation/`](evaluation/)) provides a unified benchmark across all 4 experimental tiers on the fixed 200 held-out test cases:
+
+```
+                               EVALUATION SUITE
+                              /                \
+          PILLAR A: STRUCTURAL METRICS      PILLAR B: CLINICAL LLM-AS-A-JUDGE
+          ----------------------------      ---------------------------------
+          • <think> format compliance (%)   • 1. Intermediate Diagnostic Hypotheses (1-5)
+          • Tag integrity (unclosed tags)   • 2. Evidence Utilization (1-5)
+          • Average thought token length    • 3. Contradiction Handling (1-5)
+          • Reasoning-to-Answer ratio       • 4. Reflection & Self-Correction (1-5)
+          • Reflection marker density       • Diagnostic accuracy & clinical safety
+```
+
+### 🔬 Pillar B Clinical Reasoning Axes:
+1. **Intermediate Diagnostic Hypotheses (1–5):** Does the model explore differential diagnostic possibilities rather than jumping blindly to conclusions?
+2. **Evidence Utilization (1–5):** How thoroughly does the model connect the patient's symptoms, vitals, history, and examination findings?
+3. **Contradiction Handling (1–5):** How effectively does the model identify conflicting signs, resolve ambiguity, and rule out competing conditions?
+4. **Reflection & Self-Correction (1–5):** Does the model demonstrate internal cognitive auditing (*"Wait, let me double-check this mechanism..."*)?
 
 ---
 
@@ -62,30 +100,38 @@ High-efficiency 4-bit NormalFloat (NF4) quantization with double quantization on
 
 ```tree
 peft-recipes-lab/
-├── lora/                                # LoRA & QLoRA Fine-Tuning Implementation
-│   ├── config.yaml                      # Hyperparameters, precision, and training configuration
-│   ├── train.py                         # Multi-GPU CLI runner with DDP & accelerate support
-│   ├── finetune-mistral-7b.ipynb        # Mistral-7B QLoRA training notebook
-│   ├── evaluate-mistral-7b.ipynb        # Fast batched inference & perplexity evaluation notebook
-│   ├── finetune-llama_3.2-1b.ipynb      # LLaMA-3.2-1B LoRA training notebook
+├── dataset/
+│   ├── prepare_cot_dataset.py       # Partitions ty-kim/medical_cot into 1,800 train / 200 test & pushes to Hub
+│   └── README.md                    # Detailed dataset card published to the Hugging Face Hub
+│
+├── docs/
+│   ├── reasoning_styles_guide.md    # Guide to the 4 CoT reasoning paradigms (R1, Math, Logic, Code)
+│   └── superpowers/
+│       ├── specs/                   # System architecture and 4-tier experimental design spec
+│       └── plans/                   # Test-driven implementation plan
+│
+├── evaluation/
+│   ├── cot_evaluator.py             # Pillar A: Rule-based <think> metrics, token stats, reflection density
+│   ├── clinical_judge.py            # Pillar B: 4-axis LLM judge (Gemini / OpenAI) for clinical deduction
+│   ├── run_benchmark.py             # Unified CLI runner comparing Tiers 0, 1, 2, and 3
+│   └── perplexity.py                # Cross-entropy loss & perplexity evaluator
+│
+├── lora/
+│   ├── config.yaml                  # Mistral-7B QLoRA configuration (P100 FP16, max_seq 2048, loss weights)
+│   ├── finetune-mistral-7b-cot.ipynb# Kaggle notebook with git-pull sync & multi-GPU support
+│   ├── train.py                     # CLI training runner supporting --mode {direct,cot,weighted_cot}
 │   └── src/
-│       ├── data_loader.py               # Conversational dataset formatter & deterministic subsampler
-│       ├── model_builder.py             # QLoRA 4-bit / precision selector & adapter injector
-│       ├── trainer.py                   # SFTTrainer wrapper, integrity verifier & curve logger
-│       └── inference.py                 # Chat inference engine with architecture-safe stop tokens
+│       ├── data_loader.py           # Mode-aware data loader (text_cot vs. text_direct) with Hub/disk fallback
+│       ├── model_builder.py         # 4-bit QLoRA builder with BitsAndBytes NF4 & FP16 compute
+│       ├── trainer.py               # SFTTrainer wrapper with Kaggle P100 / T4 memory optimizations
+│       ├── weighted_loss_trainer.py # Progressive per-token loss collator & weighted trainer (Tier 3)
+│       └── inference.py             # Long-form generation with clean stopping criteria
 │
-├── evaluation/                          # Unified 3-Pillar Evaluation Suite (Shared across all recipes)
-│   ├── perplexity.py                    # Cross-Entropy Loss & Perplexity (PPL = exp(loss)) with adapter toggling
-│   ├── script_purity.py                 # Latin vs Devanagari character-level adherence detector
-│   ├── judge_prompts.py                 # Prompt rubrics for single-turn & pairwise LLM-as-a-Judge
-│   ├── llm_judge.py                     # Multi-provider judge engine (Google Gemini, OpenAI, Claude) with retry backoff
-│   └── evaluator.py                     # Consolidated HinglishEvaluator dashboard generator
+├── utilities/
+│   └── plotting.py                  # Training loss and perplexity dashboard plotter
 │
-├── utilities/                           # Common Shared Utilities
-│   └── plotting.py                      # 4-Panel dashboard visualizer & JSON metrics exporter
-│
-├── Pipfile                              # Pinned dependencies & version bounds
-└── README.md                            # Repository documentation
+├── Pipfile                          # Pinned dependencies (trl<0.15.0 for stable multi-GPU training)
+└── README.md                        # Documentation for cot branch
 ```
 
 ---
@@ -95,133 +141,70 @@ peft-recipes-lab/
 ### 1. Installation
 
 ```bash
-git clone https://github.com/theGuyWithBlackTie/peft-recipes-lab.git
+git clone -b cot https://github.com/theGuyWithBlackTie/peft-recipes-lab.git
 cd peft-recipes-lab
 
-# Using Pipenv
-pipenv install --dev
-
-# Or using standard pip
-pip install -r <(pipenv requirements)
+# Install dependencies (trl<0.15.0 ensures multi-GPU stability)
+pip install -q "transformers>=4.46.0" "peft>=0.13.0" "trl<0.15.0" "accelerate>=0.34.0" "bitsandbytes>=0.43.0" datasets pyyaml huggingface_hub matplotlib
 ```
 
----
+### 2. Dataset Preparation & Hub Sync
 
-### 2. Interactive Notebook Training (Kaggle / Google Colab)
-
-To fine-tune Mistral-7B using 4-bit QLoRA on a single 16GB GPU:
-
-```python
-# 1. Clone repository directly inside Kaggle / Colab
-!git clone https://github.com/theGuyWithBlackTie/peft-recipes-lab.git
-import sys
-sys.path.insert(0, '/kaggle/working/peft-recipes-lab')
-
-# 2. Open and run lora/finetune-mistral-7b.ipynb
-```
-
----
-
-### 3. Evaluation & Inference (Kaggle + Local)
-
-Run [`lora/evaluate-mistral-7b.ipynb`](lora/evaluate-mistral-7b.ipynb) to evaluate the fine-tuned model:
-
-1. **Quantitative Perplexity:** Computes cross-entropy loss and perplexity on test data for Base Model vs. LoRA Model using zero-overhead in-memory adapter toggling (`model.disable_adapter()`).
-2. **Batched Response Generation:** Generates side-by-side responses on 100 test prompts using parallel left-padded decoding (`batch_size=8`) in ~10 minutes.
-3. **Run Evaluation:** Pass the responses directly into [`HinglishEvaluator`](evaluation/evaluator.py):
-
-```python
-import json
-from evaluation.evaluator import HinglishEvaluator
-
-with open("eval_generations_100.json", "r", encoding="utf-8") as f:
-    test_samples = json.load(f)
-
-evaluator = HinglishEvaluator(
-    judge_model_name="gemini-1.5-flash",
-    judge_api_key="YOUR_GEMINI_API_KEY"
-)
-
-report = evaluator.evaluate_generation_quality(test_samples, run_llm_judge=True)
-summary_md = evaluator.generate_markdown_summary(report)
-print(summary_md)
-```
-
----
-
-### 4. Multi-GPU Distributed Training via CLI
-
-Launch distributed training across multiple GPUs using Hugging Face `accelerate`:
+The dataset is partitioned into 1,800 training and 200 test samples:
 
 ```bash
-# Set your Hugging Face Access Token
-export HF_TOKEN="hf_your_access_token"
+# Partitions ty-kim/medical_cot and exports to dataset/hf_export/medical_cot
+python dataset/prepare_cot_dataset.py
 
-# Launch multi-GPU distributed SFT
-accelerate launch lora/train.py --config lora/config.yaml
+# Push directly to your Hugging Face Hub account:
+python dataset/prepare_cot_dataset.py --push_to_hub --repo_id theguywithblacktie/medical-cot
 ```
 
----
+### 3. Training Across Experimental Tiers
 
-## 📊 Comprehensive Evaluation Suite
+You can train any tier using the CLI runner by passing the `--mode` flag:
 
-The `evaluation/` module provides a comprehensive 3-pillar benchmarking framework shared across all PEFT recipes:
+```bash
+# Tier 1: Baseline Direct SFT (Question -> direct Response)
+python lora/train.py --mode direct
 
-```
-                          EVALUATION SUITE
-                         /        |       \
-       1. QUANTITATIVE        2. SCRIPT           3. QUALITATIVE
-         PERPLEXITY            PURITY             LLM-AS-A-JUDGE
-       --------------        ----------           --------------
-       • Teacher-forcing     • Latin char %       • Coherence (1-5)
-       • PPL = exp(Loss)     • Devanagari bleed   • Helpfulness (1-5)
-       • Fast forward-pass   • 100% Romanized %   • Naturalness (1-5)
-       • Zero API costs      • Pure CPU regex     • Blind Win Rate (%)
+# Tier 2: Standard CoT SFT (Question -> <think>...</think> -> Response)
+python lora/train.py --mode cot
+
+# Tier 3: Progressive Weighted-Loss CoT SFT
+python lora/train.py --mode weighted_cot
 ```
 
-### 🏆 Benchmark Metrics:
-* **Perplexity Reduction:** Quantifies confidence gain on domain language ($PPL_{\text{reduction}} = \frac{PPL_{\text{base}} - PPL_{\text{lora}}}{PPL_{\text{base}}} \times 100$).
-* **Script Purity Score:** Measures percentage of Latin characters vs accidental Devanagari character bleed.
-* **LLM-as-a-Judge (Gemini / OpenAI):** 
-  * *Coherence & Sensicality (1–5)*
-  * *Helpfulness & Factuality (1–5)*
-  * *Hinglish Naturalness & Code-Mixing (1–5)*
-  * *Blind Head-to-Head Pairwise Win Rate (%)*
+### 4. Running Benchmarks & Comparative Ablations
+
+Evaluate any model tier against the 200 held-out test cases:
+
+```bash
+# Evaluate Tier 0: Zero-Shot Base Mistral-7B
+python evaluation/run_benchmark.py --tier 0 --model_id mistralai/Mistral-7B-Instruct-v0.3
+
+# Evaluate Tier 1: Direct SFT Baseline
+python evaluation/run_benchmark.py --tier 1 --adapter_path ./mistral-direct-lora-outputs
+
+# Evaluate Tier 2: Standard CoT SFT
+python evaluation/run_benchmark.py --tier 2 --adapter_path ./mistral-cot-lora-outputs
+
+# Evaluate Tier 3: Progressive Weighted Loss SFT
+python evaluation/run_benchmark.py --tier 3 --adapter_path ./mistral-weighted_cot-lora-outputs
+```
+
+*All metrics and side-by-side comparative Markdown tables are automatically aggregated in `lora/eval_results/cot_ablation_report.md`.*
 
 ---
 
-## ⚡ Speed Optimization & Hardware Tuning
+## 📓 Interactive Kaggle Execution
 
-| Parameter / Lever | 🐢 Default Setup | ⚡ Optimized Setup | Technical Reason |
-|---|---|---|---|
-| **Precision on P100 / T4** | `use_bf16: true` | `use_fp16: true, use_bf16: false` | Turing/Pascal lacks native BF16; emulated BF16 is 10x slower than FP16 Tensor Cores. |
-| **Attention Implementation** | Eager Attention | `attn_implementation="sdpa"` | Scaled Dot-Product Attention fuses CUDA kernels, avoiding intermediate matrix allocation. |
-| **Sequence Length ($L$)** | `max_seq_length: 2048` | `max_seq_length: 1024` | Attention FLOPs scale as $O(L^2)$. Conversational turns average ~250–350 tokens. |
-| **Validation Strategy** | Full test set (4,500 samples) | `max_eval_samples: 200` | Avoids 35-minute evaluation stalls every 500 steps, cutting eval time to 15 seconds. |
-| **Inference KV-Caching** | `use_cache: false` | `use_cache: true` | Prevents re-computing $O(N^2)$ past attention states during autoregressive token generation. |
-| **Inference Batching** | `batch_size: 1` (~50s / pair) | `batch_size: 8` with left-padding (~3.5s / pair) | Slices generation time by ~15x by saturating GPU compute cores concurrently. |
+Open [`lora/finetune-mistral-7b-cot.ipynb`](lora/finetune-mistral-7b-cot.ipynb) on Kaggle with GPU accelerator (**P100** or **T4 x 2**):
 
----
-
-## 🗺️ PEFT Recipes Roadmap
-
-This repository is actively developing dedicated recipe implementations for each major PEFT paradigm:
-
-- [x] **Recipe 1: LoRA (Low-Rank Adaptation):** Standard low-rank weight decomposition on LLaMA-3.2-1B.
-- [x] **Recipe 2: QLoRA (Quantized LoRA):** 4-bit NormalFloat (NF4) base model quantization on Mistral-7B-Instruct-v0.3.
-- [ ] **Recipe 3: AdaLoRA (Adaptive Low-Rank Adaptation):** Dynamic rank allocation across weight matrices based on importance scores.
-- [ ] **Recipe 4: Prefix Tuning & Prompt Tuning:** Prepending trainable continuous virtual tokens.
-- [ ] **Recipe 5: DoRA (Weight-Decomposed Low-Rank Adaptation):** Decomposing weights into magnitude and directional updates.
-- [ ] **Recipe 6: Alignment via DPO / ORPO:** Direct Preference Optimization for Hinglish alignment pairs.
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-Made with ❤️ for open-source AI and multilingual NLP research.
-</div>
+1. **Cell 1** automatically pulls the latest code from GitHub branch `cot`.
+2. **Cell 4** lets you choose your experiment mode:
+   ```python
+   EXPERIMENT_MODE = "cot"  # Options: 'cot', 'direct', or 'weighted_cot'
+   ```
+3. **Cell 7** executes training, saves adapters, and uploads to Hugging Face Hub.
+4. **Cell 8** runs test clinical inference displaying the model's `<think>...</think>` reflection and diagnosis!
