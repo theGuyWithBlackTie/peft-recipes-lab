@@ -186,6 +186,13 @@ class Trainer:
         else:
             return SFTTrainer(**trainer_kwargs)
 
+    def setup_trainer(self) -> Any:
+        """
+        Public helper to initialize and return the underlying SFTTrainer or ProgressiveWeightedLossTrainer.
+        """
+        training_args = self._get_training_arguments()
+        return self._setup_trainer(training_args)
+
     def train_and_save(self) -> None:
         """
         Executes the training loop and saves the final adapters.

@@ -35,13 +35,20 @@ class DataLoader:
         else:
             self.source_text_column = "text_cot"
 
+    def load_and_format_data(self) -> Tuple[Dataset, Dataset]:
+        """
+        Pipeline to load and format the dataset for training.
+        Alias for load_and_prepare for notebook and pipeline compatibility.
+        """
+        return self.load_and_prepare()
+
     def _format_cot_fallback(self, example: Dict[str, Any]) -> Dict[str, Any]:
         """
         Formatting fallback if loading from ty-kim/medical_cot.
         """
-        instruction = example.get('question', example.get('instruction', ''))
-        complex_cot = example.get('Complex_CoT', '')
-        response = example.get('Response', '')
+        instruction = example.get('Question') or example.get('question') or example.get('instruction') or ''
+        complex_cot = example.get('Complex_CoT') or example.get('complex_cot') or example.get('cot') or ''
+        response = example.get('Response') or example.get('response') or example.get('output') or ''
 
         text_cot = f"[INST] {instruction} [/INST] <think>\n{complex_cot}\n</think>\n{response}"
         text_direct = f"[INST] {instruction} [/INST] {response}"
