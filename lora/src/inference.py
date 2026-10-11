@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Any, List, Optional
 import logging
 
@@ -26,7 +27,8 @@ class InferenceEngine:
         config: Dict[str, Any],
         model: Optional[PreTrainedModel] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
-        adapter_path: Optional[str] = None
+        adapter_path: Optional[str] = None,
+        checkpoint_path: Optional[str] = None
     ):
         """Initializes the inference wrapper
 
@@ -34,14 +36,29 @@ class InferenceEngine:
             config (dict): Project configuration dictionary
             model (PreTrainedModel, optional): Pre-loaded model (if already in memory)
             tokenizer (PreTrainedTokenizer, optional): Pre-loaded tokenizer
-            adapter_path (str, optional): Custom path to LoRA adapter weights checkpoint
+            adapter_path (str, optional): Custom path to LoRA adapter weights / checkpoint
+            checkpoint_path (str, optional): Alias for adapter_path to load a specific checkpoint directory
         """
         self.config = config
         self.model_id = self.config.get("model_id", "mistralai/Mistral-7B-Instruct-v0.3")
-        self.adapter_path = adapter_path or self.config.get("output_dir", "./mistral-lora-outputs")
+        self.adapter_path = checkpoint_path or adapter_path or self.config.get("output_dir", "./mistral-lora-outputs")
 
         self.model = model
         self.tokenizer = tokenizer
+
+        # If a checkpoint_path is provided along with an in-memory model, attach/load that adapter
+        if self.model is not None and (checkpoint_path or adapter_path):
+            if os.path.exists(self.adapter_path):
+                try:
+                    if isinstance(self.model, PeftModel):
+                        logger.info(f"Loading adapter from checkpoint {self.adapter_path} into existing PeftModel...")
+                        self.model.load_adapter(self.adapter_path, adapter_name="eval_checkpoint")
+                        self.model.set_adapter("eval_checkpoint")
+                    else:
+                        logger.info(f"Attaching LoRA adapter from checkpoint {self.adapter_path} to base model...")
+                        self.model = PeftModel.from_pretrained(self.model, self.adapter_path)
+                except Exception as e:
+                    logger.warning(f"Could not attach checkpoint adapter from {self.adapter_path}: {e}")
 
         if self.model is not None:
             self.model.eval()
