@@ -21,18 +21,30 @@ class InferenceEngine:
     fine-tuned LoRA adapters.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        model: Optional[PreTrainedModel] = None,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
+        adapter_path: Optional[str] = None
+    ):
         """Initializes the inference wrapper
 
         Args:
             config (dict): Project configuration dictionary
+            model (PreTrainedModel, optional): Pre-loaded model (if already in memory)
+            tokenizer (PreTrainedTokenizer, optional): Pre-loaded tokenizer
+            adapter_path (str, optional): Custom path to LoRA adapter weights checkpoint
         """
         self.config = config
         self.model_id = self.config.get("model_id", "mistralai/Mistral-7B-Instruct-v0.3")
-        self.adapter_path = self.config.get("output_dir", "./mistral-lora-outputs")
+        self.adapter_path = adapter_path or self.config.get("output_dir", "./mistral-lora-outputs")
 
-        self.tokenizer = None
-        self.model = None
+        self.model = model
+        self.tokenizer = tokenizer
+
+        if self.model is not None:
+            self.model.eval()
 
     def _load_model_and_tokenizer(self) -> None:
         """Loads the base model and merges/attaches the LoRA adapters."""
@@ -99,20 +111,28 @@ class InferenceEngine:
         if self.model is None or self.tokenizer is None:
             self._load_model_and_tokenizer()
         
-        # Construct the message payload if not provided
+        # Construct the message payload or use pre-formatted prompt
         if messages is None:
             if user_prompt is None:
                 raise ValueError("Either `user_prompt` or `messages` must be provided.")
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-
-        prompt_text = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+            if user_prompt.strip().startswith("[INST]"):
+                prompt_text = user_prompt
+            else:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+                prompt_text = self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+        else:
+            prompt_text = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
 
         logger.info("Tokenizing input...")
         inputs = self.tokenizer(prompt_text, return_tensors="pt").to(self.model.device)
