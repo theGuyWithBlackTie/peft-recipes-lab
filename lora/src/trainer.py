@@ -159,26 +159,26 @@ class Trainer:
             except Exception as e:
                 logger.warning(f"Could not initialize DataCollatorForCompletionOnlyLM: {e}")
 
-        # Legacy TRL parameter support (passed directly to SFTTrainer in older versions)
         if "dataset_text_field" in sft_init_params:
             trainer_kwargs["dataset_text_field"] = "text"
         if "max_seq_length" in sft_init_params:
-            trainer_kwargs["max_seq_length"] = self.config.get("max_seq_length", 512)
+            trainer_kwargs["max_seq_length"] = self.config.get("max_seq_length", 2048)
         if "packing" in sft_init_params:
             trainer_kwargs["packing"] = False
-        if "peft_config" in sft_init_params:
-            trainer_kwargs["peft_config"] = None
+        if "peft_config" in sft_init_params and self.config.get("peft_config") is not None:
+            trainer_kwargs["peft_config"] = self.config["peft_config"]
 
         experiment_mode = self.config.get("experiment_mode", "direct")
 
         if experiment_mode == "weighted_cot":
             logger.info("Initializing ProgressiveWeightedLossTrainer (Tier 3)...")
             from lora.src.weighted_loss_trainer import ProgressiveWeightedLossTrainer, ProgressiveWeightedLossCollator
+            loss_weights_cfg = self.config.get("loss_weighting", {})
             weights = {
-                "think_tag_weight": 0.25,
-                "reasoning_weight": 0.50,
-                "end_think_tag_weight": 0.75,
-                "answer_weight": 1.00,
+                "think_tag_weight": float(loss_weights_cfg.get("think_tag_weight", 0.25)),
+                "reasoning_weight": float(loss_weights_cfg.get("reasoning_weight", 0.50)),
+                "end_think_tag_weight": float(loss_weights_cfg.get("end_think_tag_weight", 0.75)),
+                "answer_weight": float(loss_weights_cfg.get("answer_weight", 1.00)),
                 "prompt": 0.00
             }
             collator = ProgressiveWeightedLossCollator(tokenizer=self.tokenizer, weights=weights)
